@@ -502,32 +502,22 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
                 st.error(f"❌ ไม่พบรหัสอุปกรณ์ '{search_query}'")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) แบบสมบูรณ์
+# หน้าที่ 5: แผนบำรุงรักษา (PM) แบบสมบูรณ์ (แก้ไข NameError)
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
     
-    # 1. บรรทัดที่สร้างตัวแปรต้องมีชื่อ tab_add อยู่ด้วย
+    # 1. ประกาศสร้าง Tabs
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
 
-    # 2. บรรทัดด้านล่างต้องย่อหน้า (Tab) เข้าไปให้ตรงกัน
-    with tab_cal:
-        # โค้ดปฏิทิน...
-        pass # แทนที่ด้วยโค้ดเดิม
+    # 2. โหลดข้อมูลจากฐานข้อมูลมาเก็บไว้ในตัวแปร df_pm ก่อนใช้งาน
+    df_pm = load_table("pm_schedules")
 
-    with tab_list:
-        # โค้ดรายการ...
-        pass # แทนที่ด้วยโค้ดเดิม
-
-    with tab_add: # <--- ตรวจสอบว่าบรรทัดนี้เยื้อง (Indent) ตรงกับ with tab_cal:
-        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
-
-    # --- Tab 1: ปฏิทินงาน PM (แสดงภาพรวม) ---
+    # --- Tab 1: ปฏิทินงาน PM ---
     with tab_cal:
         if not df_pm.empty:
             calendar_events = []
             for _, row in df_pm.iterrows():
-                # สีเขียว = สำเร็จ, สีน้ำเงิน = ตามกำหนด, สีแดง = เลยกำหนด (กรณีเปรียบเทียบวัน)
                 event_color = "#2e7d32" if row['status'] == "Completed" else "#0046ad"
                 
                 calendar_events.append({
@@ -546,10 +536,9 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
         else:
             st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
 
-    # --- Tab 2: รายการและบันทึกผล (Action) ---
+    # --- Tab 2: รายการและบันทึกผล ---
     with tab_list:
         if not df_pm.empty:
-            # ตารางแสดงรายการทั้งหมด
             df_pm_view = df_pm[['id', 'task_name', 'next_due_date', 'frequency', 'assignee', 'status']].copy()
             df_pm_view.rename(columns={
                 'id':'รหัสงาน', 'task_name':'ชื่องาน', 'next_due_date':'กำหนดวันทำ',
@@ -559,7 +548,6 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             
             st.divider()
             
-            # ส่วนการบันทึกผล PM
             pending_pm = df_pm[df_pm['status'] != 'Completed']
             if not pending_pm.empty:
                 st.subheader("📝 บันทึกผลการตรวจเช็ค")
@@ -578,58 +566,53 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             else:
                 st.success("🎉 ทุกแผนงานในระบบดำเนินการเสร็จสิ้นแล้ว!")
 
-    # --- Tab 3: ลงทะเบียนแผนใหม่ (พร้อมระบบคำนวณวันล่วงหน้าอัตโนมัติ) ---
-with tab_add:
-    st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
-    with st.form("new_pm_automation_form"):
-        pm_name = st.text_input("ชื่องาน (Task Name)*")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            start_date = st.date_input("เริ่มตั้งแต่วันที่")
-            pm_freq = st.selectbox("ความถี่ (Frequency)", 
-                                 ["ครั้งเดียว (One-time)", "รายวัน (Daily)", "รายสัปดาห์ (Weekly)", "รายเดือน (Monthly)", "รายปี (Yearly)"])
-        with c2:
-            pm_assignee = st.text_input("ช่างผู้รับผิดชอบ")
-            # เลือกจำนวนครั้งที่ต้องการสร้างล่วงหน้า (เช่น ทำรายเดือน 12 ครั้ง = 1 ปี)
-            occurence = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, max_value=50, value=12 if "Monthly" in pm_freq else 1)
+    # --- Tab 3: ลงทะเบียนแผนใหม่ (ต้องย่อหน้าให้ตรงกับ with อื่นๆ) ---
+    with tab_add:
+        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
+        with st.form("new_pm_automation_form"):
+            pm_name = st.text_input("ชื่องาน (Task Name)*")
             
-        pm_check = st.text_area("รายการ Checklist")
-        
-        if st.form_submit_button("บันทึกและจัดตารางลงปฏิทิน"):
-            if pm_name and pm_check:
-                current_due_date = start_date
-                base_id = f"PM-{datetime.now().strftime('%m%S')}"
+            c1, c2 = st.columns(2)
+            with c1:
+                start_date = st.date_input("เริ่มตั้งแต่วันที่")
+                pm_freq = st.selectbox("ความถี่ (Frequency)", 
+                                     ["ครั้งเดียว (One-time)", "รายวัน (Daily)", "รายสัปดาห์ (Weekly)", "รายเดือน (Monthly)", "รายปี (Yearly)"])
+            with c2:
+                pm_assignee = st.text_input("ช่างผู้รับผิดชอบ")
+                occurence = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, max_value=50, value=12 if "Monthly" in pm_freq else 1)
                 
-                # วนลูปเพื่อสร้างข้อมูลตามจำนวนครั้ง (Occurences)
-                for i in range(occurence):
-                    # สร้าง ID เฉพาะสำหรับแต่ละครั้ง
-                    task_id = f"{base_id}-{i+1}"
+            pm_check = st.text_area("รายการ Checklist")
+            
+            if st.form_submit_button("บันทึกและจัดตารางลงปฏิทิน"):
+                if pm_name and pm_check:
+                    current_due_date = start_date
+                    base_id = f"PM-{datetime.now().strftime('%m%S')}"
                     
-                    insert_data("pm_schedules", {
-                        "id": task_id,
-                        "task_name": f"{pm_name} (ครั้งที่ {i+1})",
-                        "next_due_date": str(current_due_date),
-                        "frequency": pm_freq,
-                        "assignee": pm_assignee,
-                        "checklist": pm_check,
-                        "status": "Scheduled"
-                    })
+                    for i in range(occurence):
+                        task_id = f"{base_id}-{i+1}"
+                        insert_data("pm_schedules", {
+                            "id": task_id,
+                            "task_name": f"{pm_name} (ครั้งที่ {i+1})",
+                            "next_due_date": str(current_due_date),
+                            "frequency": pm_freq,
+                            "assignee": pm_assignee,
+                            "checklist": pm_check,
+                            "status": "Scheduled"
+                        })
+                        
+                        if pm_freq == "รายวัน (Daily)":
+                            current_due_date += relativedelta(days=1)
+                        elif pm_freq == "รายสัปดาห์ (Weekly)":
+                            current_due_date += relativedelta(weeks=1)
+                        elif pm_freq == "รายเดือน (Monthly)":
+                            current_due_date += relativedelta(months=1)
+                        elif pm_freq == "รายปี (Yearly)":
+                            current_due_date += relativedelta(years=1)
+                        else:
+                            break
                     
-                    # --- คำนวณวันถัดไปตามความถี่ ---
-                    if pm_freq == "รายวัน (Daily)":
-                        current_due_date += relativedelta(days=1)
-                    elif pm_freq == "รายสัปดาห์ (Weekly)":
-                        current_due_date += relativedelta(weeks=1)
-                    elif pm_freq == "รายเดือน (Monthly)":
-                        current_due_date += relativedelta(months=1)
-                    elif pm_freq == "รายปี (Yearly)":
-                        current_due_date += relativedelta(years=1)
-                    else: # Once-time
-                        break
-                
-                st.toast(f"สร้างแผนงาน {occurence} ครั้ง ลงปฏิทินเรียบร้อยแล้ว!", icon="📅")
-                st.success(f"ระบบได้จัดตารางงาน '{pm_name}' ล่วงหน้าให้คุณเรียบร้อย")
-                st.rerun()
-            else:
-                st.error("กรุณาระบุข้อมูลให้ครบถ้วน")
+                    st.toast(f"สร้างแผนงาน {occurence} ครั้ง เรียบร้อย!", icon="📅")
+                    st.success(f"ระบบจัดตารางงาน '{pm_name}' ล่วงหน้าให้แล้ว")
+                    st.rerun()
+                else:
+                    st.error("กรุณาระบุข้อมูลให้ครบถ้วน")
