@@ -487,19 +487,21 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
                 
                 st.write("") # เว้นวรรค
 
-                # แสดงประวัติการซ่อม
-                history = df_t[df_t['asset_id'] == target_asset['id']]
-                if not history.empty:
-                    total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
-                    st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
+                # --- ส่วนที่ปรับปรุง: ตรวจสอบว่ามีคอลัมน์ asset_id หรือไม่ก่อนกรองข้อมูล ---
+                if 'asset_id' in df_t.columns:
+                    history = df_t[df_t['asset_id'] == target_asset['id']]
                     
-                    h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
-                    h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
-                    st.dataframe(h_view, use_container_width=True, hide_index=True)
+                    if not history.empty:
+                        total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
+                        st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
+                        
+                        h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
+                        h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
+                        st.dataframe(h_view, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
                 else:
-                    st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
-            else:
-                st.error(f"❌ ไม่พบรหัสอุปกรณ์ '{search_query}'")
+                    st.warning("⚠️ ไม่พบคอลัมน์ 'asset_id' ในฐานข้อมูล กรุณาตรวจสอบตาราง tickets")
 
 # ==========================================
 # หน้าที่ 5: แผนบำรุงรักษา (PM) แบบสมบูรณ์ (แก้ไข NameError)
