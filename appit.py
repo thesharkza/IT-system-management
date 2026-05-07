@@ -75,7 +75,7 @@ depts = ["MAT", "KD1", "QC", "Office", "Other"]
 ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
 
 # ==========================================
-# หน้าที่ 1: แจ้งซ่อม (User)
+# หน้าที่ 1: แจ้งซ่อม (User) - อัปเดตให้บันทึกรหัสอุปกรณ์แบบเจาะจง
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
     st.header("ฟอร์มแจ้งซ่อมออนไลน์")
@@ -86,7 +86,7 @@ if page == "📝 แจ้งซ่อม (User)":
             department = st.selectbox("แผนก", depts) 
             category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
         with col2:
-            asset_id = st.text_input("รหัส/ชื่ออุปกรณ์ (ถ้าทราบ)")
+            asset_id_input = st.text_input("รหัสอุปกรณ์ (เช่น PC-001)") # กรอกเพื่อผูกประวัติ
             urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
             uploaded_file = st.file_uploader("แนบไฟล์รูปภาพปัญหา (ถ้ามี)", type=['png', 'jpg', 'jpeg'])
             
@@ -95,18 +95,18 @@ if page == "📝 แจ้งซ่อม (User)":
 
         if submitted and user_name and description:
             df_existing = load_table("tickets")
-            ticket_id = f"JOB-{len(df_existing) + 1:04d}" # เปลี่ยน prefix ให้ดูเป็นงานซ่อมมากขึ้น
+            ticket_id = f"JOB-{len(df_existing) + 1:04d}"
             date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            full_desc = f"[อุปกรณ์: {asset_id}] {description}" if asset_id else description
             file_name = uploaded_file.name if uploaded_file else ""
             
+            # บันทึก asset_id ลงฐานข้อมูลโดยตรง เพื่อให้ผูกกับหน้าทะเบียนอุปกรณ์ได้
             insert_data("tickets", {
                 "id": ticket_id, "date": date_str, "user": user_name, 
-                "dept": department, "category": category, "desc": full_desc, 
-                "status": "รอตรวจสอบ", "urgency": urgency, "image_path": file_name
+                "dept": department, "category": category, "desc": description, 
+                "status": "รอตรวจสอบ", "urgency": urgency, "image_path": file_name,
+                "asset_id": asset_id_input 
             })
-            st.success(f"✅ บันทึกสำเร็จ! หมายเลขงานของคุณคือ: {ticket_id}")
+            st.success(f"✅ บันทึกสำเร็จ! หมายเลขงาน: {ticket_id}")
             st.rerun()
 
     # --- Dashboard ติดตามสถานะให้ User ---
