@@ -27,16 +27,13 @@ def update_status(table_name, record_id, new_status):
 # ==========================================
 # ระบบ LOGIN (ซ่อนเมนู Admin)
 # ==========================================
-# กำหนดรหัสผ่านสำหรับ IT Admin ตรงนี้ (เปลี่ยนได้ตามต้องการ)
-ADMIN_PASSWORD = "adminit123"
+ADMIN_PASSWORD = "itpassword123"
 
-# ตรวจสอบสถานะการ Login ในระบบ
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 st.sidebar.title("🔐 สำหรับเจ้าหน้าที่ IT")
 if not st.session_state.is_admin:
-    # ฟอร์ม Login สำหรับ Admin
     admin_pass = st.sidebar.text_input("ใส่รหัสผ่านเพื่อเข้าโหมดจัดการ", type="password")
     if st.sidebar.button("เข้าสู่ระบบ"):
         if admin_pass == ADMIN_PASSWORD:
@@ -45,7 +42,6 @@ if not st.session_state.is_admin:
         else:
             st.sidebar.error("❌ รหัสผ่านไม่ถูกต้อง")
 else:
-    # กรณี Login ผ่านแล้ว
     st.sidebar.success("✅ โหมด IT Admin ทำงาน")
     if st.sidebar.button("ออกจากระบบ (Logout)"):
         st.session_state.is_admin = False
@@ -58,7 +54,6 @@ st.sidebar.divider()
 # ==========================================
 st.sidebar.title("🛠️ IT System Menu")
 
-# ถ้าเป็น Admin ให้เห็นทุกเมนู ถ้าไม่ใช่ให้เห็นแค่แจ้งปัญหา
 if st.session_state.is_admin:
     menu_options = [
         "📝 แจ้งปัญหา (User)", 
@@ -72,7 +67,6 @@ else:
 
 page = st.sidebar.radio("เลือกหน้าต่างการทำงาน", menu_options)
 
-# รายชื่อแผนกหลัก
 depts = ["MAT", "KD1", "QC", "Office", "Other"]
 
 # ==========================================
@@ -104,6 +98,44 @@ if page == "📝 แจ้งปัญหา (User)":
                 "dept": department, "category": category, "desc": full_desc, "status": "Pending"
             })
             st.success(f"✅ บันทึกสำเร็จ! หมายเลขงาน: {ticket_id} (โปรดแคปหน้าจอไว้เป็นหลักฐาน)")
+            st.rerun()
+
+    # --- เพิ่มส่วน Dashboard ติดตามสถานะให้ User ---
+    st.divider()
+    st.subheader("📋 กระดานติดตามสถานะงาน (Ticket Tracking)")
+    
+    df_tickets = load_table("tickets")
+    if not df_tickets.empty:
+        # เลือกข้อมูลมาแสดง (ซ่อนรายละเอียดเชิงลึกเพื่อความสะอาดตา)
+        df_user_view = df_tickets[['id', 'date', 'user', 'dept', 'category', 'status']].copy()
+        
+        # กำหนดความสำคัญในการเรียงลำดับ (Pending ขึ้นก่อน -> In Progress -> Resolved)
+        sort_mapping = {'Pending': 1, 'In Progress': 2, 'Resolved': 3}
+        df_user_view['sort_order'] = df_user_view['status'].map(sort_mapping)
+        
+        # เรียงข้อมูลตามสถานะ และวันที่แจ้งล่าสุด
+        df_user_view = df_user_view.sort_values(by=['sort_order', 'date'], ascending=[True, False]).drop('sort_order', axis=1)
+        
+        # ฟังก์ชันกำหนดสีตามสถานะงาน
+        def color_status(val):
+            if val == 'Pending':
+                return 'background-color: #ffebee; color: #c62828; font-weight: bold' # สีแดงอ่อน
+            elif val == 'In Progress':
+                return 'background-color: #fff8e1; color: #f57f17; font-weight: bold' # สีเหลืองส้ม
+            elif val == 'Resolved':
+                return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold' # สีเขียว
+            return ''
+            
+        # สร้างตารางพร้อมลงสีด้วยฟังก์ชัน .applymap (หรือ .map สำหรับ pandas เวอร์ชันใหม่)
+        try:
+            styled_df = df_user_view.style.applymap(color_status, subset=['status'])
+        except AttributeError:
+            styled_df = df_user_view.style.map(color_status, subset=['status'])
+            
+        # แสดงผลตาราง (ซ่อน Index ด้านหน้า)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("ยังไม่มีงานซ่อมในระบบขณะนี้")
 
 # ==========================================
 # หน้าที่ 2-5: เฉพาะ IT Admin เท่านั้น
