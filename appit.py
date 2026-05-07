@@ -99,21 +99,31 @@ if page == "📝 แจ้งซ่อม (User)":
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
             description = st.text_area("รายละเอียดปัญหา")
-            if st.form_submit_button("ส่งเรื่องแจ้งซ่อม"):
-                df_existing = load_table("tickets")
-                ticket_id = f"JOB-{len(df_existing) + 1:04d}"
-                image_data = ""
-                if uploaded_file:
-                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
-                
-                insert_data("tickets", {
-                    "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
-                    "dept": department, "category": category, "desc": description, 
-                    "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data, "asset_id": asset_id_input 
-                })
-                st.success(f"บันทึกสำเร็จ! รหัสงาน: {ticket_id}")
-                st.rerun()
+            
+            submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
+            
+            if submitted:
+                if user_name and description: # บังคับให้กรอกชื่อและรายละเอียด
+                    df_existing = load_table("tickets")
+                    ticket_id = f"JOB-{len(df_existing) + 1:04d}"
+                    image_data = ""
+                    if uploaded_file:
+                        encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                        image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+                    
+                    insert_data("tickets", {
+                        "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
+                        "dept": department, "category": category, "desc": description, 
+                        "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data, "asset_id": asset_id_input 
+                    })
+                    
+                    # --- สร้างการแจ้งเตือน 2 ระดับ ---
+                    st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅') # เด้งที่มุมขวาล่าง
+                    st.success(f"🎉 บันทึกข้อมูลสำเร็จ! ทีมช่างได้รับเรื่องแล้ว หมายเลขอ้างอิงของคุณคือ: **{ticket_id}**")
+                    # ----------------------------------
+                    
+                else:
+                    st.error("❌ กรุณาระบุชื่อผู้แจ้งและรายละเอียดปัญหาให้ครบถ้วน")
 
     with tab2:
         st.subheader("งานซ่อมที่รอการประเมิน")
