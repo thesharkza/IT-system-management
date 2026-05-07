@@ -410,35 +410,81 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
     else:
         st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในฐานข้อมูล")
 # ==========================================
-# หน้าที่ 4: Assets (Detailed History)
+# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ & ระบบค้นหาประวัติ)
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
-    st.header("ทะเบียนอุปกรณ์")
-    with st.expander("ลงทะเบียนใหม่"):
-        with st.form("new_asset"):
+    st.title("🗄️ IT Asset Management")
+    
+    # ส่วนลงทะเบียนเครื่องใหม่
+    with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
+        with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
             with a1:
-                aid = st.text_input("รหัสอุปกรณ์*")
-                atyp = st.selectbox("ประเภท", ["PC/Laptop", "Printer", "UPS", "Network", "Other"])
+                aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
+                atyp = st.selectbox("ประเภท", ["PC/Laptop", "Printer", "UPS", "Network", "Monitor", "Other"])
             with a2:
-                amod = st.text_input("รุ่น")
-                adept = st.selectbox("แผนก", depts)
-            if st.form_submit_button("บันทึก"):
-                insert_data("assets", {"id":aid, "type":atyp, "model":amod, "dept":adept, "status":"Active"})
-                st.rerun()
+                amod = st.text_input("ยี่ห้อ/รุ่น")
+                adept = st.selectbox("แผนกที่ใช้งาน", depts)
+            if st.form_submit_button("บันทึกทะเบียน"):
+                if aid:
+                    insert_data("assets", {"id":aid, "type":atyp, "model":amod, "dept":adept, "status":"Active"})
+                    st.success(f"ลงทะเบียน {aid} สำเร็จ")
+                    st.rerun()
+                else:
+                    st.error("กรุณาระบุรหัสอุปกรณ์")
 
+    # แสดงตารางทะเบียนทั้งหมด
+    st.subheader("📋 ทะเบียนอุปกรณ์ทั้งหมด")
     df_a = load_table("assets")
     df_t = load_table("tickets")
+    
     if not df_a.empty:
         st.dataframe(df_a, use_container_width=True, hide_index=True)
+        
         st.divider()
-        st.subheader("🔍 ตรวจสอบประวัติเครื่อง")
-        sel_a = st.selectbox("เลือกรหัสเครื่อง", df_a['id'].tolist())
-        history = df_t[df_t['asset_id'] == sel_a]
-        if not history.empty:
-            st.metric("ยอดค่าซ่อมสะสม", f"฿{pd.to_numeric(history['cost']).sum():,.2f}")
-            st.dataframe(history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']], hide_index=True)
-        else: st.info("ไม่มีประวัติการซ่อม")
+        
+        # --- จุดที่ปรับปรุง: เปลี่ยนจาก Selectbox เป็นช่องค้นหา (Search Box) ---
+        st.subheader("🔍 ตรวจสอบประวัติเครื่องรายอุปกรณ์")
+        search_query = st.text_input("พิมพ์รหัสอุปกรณ์ที่ต้องการค้นหา (เช่น IT-001)", placeholder="Enter Asset ID...")
+
+        if search_query:
+            # ค้นหาข้อมูลเครื่องจากทะเบียน
+            asset_info = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
+            
+            if not asset_info.empty:
+                # ถ้าเจอมากกว่า 1 รายการ (กรณีพิมพ์ไม่ครบ) ให้เลือกรายการที่เป๊ะที่สุด
+                exact_match = asset_info[asset_info['id'].str.lower() == search_query.lower()]
+                target_asset = exact_match.iloc[0] if not exact_match.empty else asset_info.iloc[0]
+                
+                # แสดงข้อมูลสรุปของเครื่องนั้นๆ
+                c1, c2, c3 = st.columns(3)
+                c1.write(f"**รหัส:** {target_asset['id']}")
+                c2.write(f"**รุ่น:** {target_asset['model']}")
+                c3.write(f"**แผนก:** {target_asset['dept']}")
+                
+                # ดึงประวัติการซ่อมจากตาราง tickets
+                history = df_t[df_t['asset_id'] == target_asset['id']]
+                
+                if not history.empty:
+                    # คำนวณค่าใช้จ่ายสะสม
+                    total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
+                    st.metric("💸 ยอดค่าซ่อมสะสมของเครื่องนี้", f"฿{total_cost:,.2f}")
+                    
+                    # แสดงตารางประวัติ
+                    history_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
+                    history_view.rename(columns={
+                        'date':'วันที่', 'user':'ผู้แจ้ง', 'root_cause':'สาเหตุ',
+                        'solution':'วิธีแก้', 'cost':'ค่าใช้จ่าย', 'status':'สถานะ'
+                    }, inplace=True)
+                    st.dataframe(history_view, use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"✨ เครื่องรหัส {target_asset['id']} ยังไม่เคยมีประวัติการซ่อม")
+            else:
+                st.error(f"❌ ไม่พบข้อมูลรหัสอุปกรณ์ '{search_query}' ในระบบ")
+        else:
+            st.caption("💡 กรุณาพิมพ์รหัสอุปกรณ์เพื่อดูประวัติการซ่อมย้อนหลัง")
+    else:
+        st.info("ยังไม่มีข้อมูลในทะเบียนอุปกรณ์")
 
 # ==========================================
 # หน้าที่ 5: แผนบำรุงรักษา (PM) แบบสมบูรณ์
