@@ -317,24 +317,32 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
 # หน้าที่ 3: Dashboard (Full CSAT)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
-    st.header("สถิติและคะแนนความพึงพอใจ")
-    df = load_table("tickets")
-    if not df.empty:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("งานทั้งหมด", len(df))
-        c2.metric("สำเร็จ", len(df[df['status'] == 'สำเร็จ']))
-        c3.metric("คะแนนเฉลี่ยรวม", f"{df['rating'].mean():.2f} / 5")
-        
-        st.divider()
-        st.subheader("คะแนนเฉลี่ยแยกตามหัวข้อ")
-        csat_stats = pd.DataFrame({
-            "หัวข้อประเมิน": ["1. ทีมสนับสนุน", "2. คุณภาพ HW/SW", "3. ความเป็นมืออาชีพ", "4. ความตรงต่อเวลา", "5. ความพึงพอใจรวม"],
-            "คะแนน": [df['q1'].mean(), df['q2'].mean(), df['q3'].mean(), df['q4'].mean(), df['q5'].mean()]
-        })
-        st.table(csat_stats)
-        
-        st.subheader("ข้อเสนอแนะล่าสุด")
-        st.dataframe(df[df['feedback'].notna()][['date', 'user', 'rating', 'feedback']], hide_index=True)
+    st.title("📈 IT Performance Overview")
+    
+    # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Total Jobs", len(df), help="จำนวนงานแจ้งซ่อมทั้งหมดในระบบ")
+    with m2:
+        resolved = len(df[df['status'] == 'สำเร็จ'])
+        st.metric("Resolved", resolved, f"{(resolved/len(df)*100):.1f}%")
+    with m3:
+        st.metric("Avg. CSAT", f"{df['rating'].mean():.2f} ⭐")
+    with m4:
+        pending = len(df[df['status'] == 'รอตรวจสอบ'])
+        st.metric("Pending", pending, f"-{pending}", delta_color="inverse")
+
+    st.markdown("---")
+    
+    # ใช้ Container เพื่อแยกส่วนกราฟให้ดูสะอาด
+    with st.container():
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("🏢 Workload by Department")
+            st.bar_chart(df['dept'].value_counts(), color="#0046ad")
+        with c2:
+            st.subheader("🛠️ Issue Categories")
+            st.bar_chart(df['category'].value_counts(), color="#ff4b4b")
 
 # ==========================================
 # หน้าที่ 4: Assets (Detailed History)
