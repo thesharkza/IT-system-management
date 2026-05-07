@@ -135,10 +135,11 @@ if page == "📝 แจ้งซ่อม (User)":
                         st.rerun()
             else: st.info("ไม่มีงานซ่อมที่รอการประเมิน")
 
-    # --- ส่วนที่เคยหายไป: ตารางติดตามสถานะหน้า User ---
+   # --- ส่วนตารางติดตามสถานะหน้า User ---
     st.divider()
     st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
     df_tickets = load_table("tickets")
+    
     if not df_tickets.empty:
         df_view = df_tickets[['id', 'date', 'user', 'category', 'urgency', 'status', 'rating']].copy()
         
@@ -147,7 +148,22 @@ if page == "📝 แจ้งซ่อม (User)":
         df_view['sort'] = df_view['status'].map(sort_map)
         df_view = df_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
         
-        df_view.rename(columns={'id':'รหัสงาน','date':'วันที่แจ้ง','user':'ผู้แจ้ง','category':'ประเภท','urgency':'ความเร่งด่วน','status':'สถานะ','rating':'คะแนนเฉลี่ย'}, inplace=True)
+        df_view.rename(columns={
+            'id':'รหัสงาน', 'date':'วันที่แจ้ง', 'user':'ผู้แจ้ง',
+            'category':'ประเภท', 'urgency':'ความเร่งด่วน', 'status':'สถานะ', 'rating':'คะแนนเฉลี่ย'
+        }, inplace=True)
+        
+        # --- ฟังก์ชันใหม่: แปลงตัวเลขเป็นดาว ---
+        def display_stars(val):
+            if pd.isna(val):  # ถ้าตารางว่างเปล่า (ยังไม่ประเมิน)
+                return "รอประเมิน"
+            else:
+                star_count = int(round(float(val))) # ปัดเศษเป็นจำนวนเต็ม
+                return "⭐" * star_count # สร้างดาวตามจำนวนตัวเลข
+                
+        # นำฟังก์ชันมาครอบคอลัมน์คะแนนเฉลี่ย
+        df_view['คะแนนเฉลี่ย'] = df_view['คะแนนเฉลี่ย'].apply(display_stars)
+        # -----------------------------------
         
         def color_status(val):
             if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828'
