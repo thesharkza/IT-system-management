@@ -314,36 +314,82 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         st.info("ยังไม่มีงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard (Full CSAT)
+# หน้าที่ 3: Dashboard (Full Analytics & UX/UI)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
     
-    # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Total Jobs", len(df), help="จำนวนงานแจ้งซ่อมทั้งหมดในระบบ")
-    with m2:
-        resolved = len(df[df['status'] == 'สำเร็จ'])
-        st.metric("Resolved", resolved, f"{(resolved/len(df)*100):.1f}%")
-    with m3:
-        st.metric("Avg. CSAT", f"{df['rating'].mean():.2f} ⭐")
-    with m4:
-        pending = len(df[df['status'] == 'รอตรวจสอบ'])
-        st.metric("Pending", pending, f"-{pending}", delta_color="inverse")
+    # --- จุดสำคัญ: ต้องโหลดข้อมูลมาใส่ตัวแปร df ก่อนเรียกใช้งาน ---
+    df = load_table("tickets") 
+    # -------------------------------------------------------
 
-    st.markdown("---")
-    
-    # ใช้ Container เพื่อแยกส่วนกราฟให้ดูสะอาด
-    with st.container():
+    if not df.empty:
+        # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ (ใช้สไตล์ Card ที่เราตั้งค่าไว้ใน CSS)
+        m1, m2, m3, m4 = st.columns(4)
+        
+        with m1:
+            st.metric("งานแจ้งซ่อมทั้งหมด", len(df), help="จำนวนงานแจ้งซ่อมทั้งหมดในระบบ")
+        
+        with m2:
+            resolved = len(df[df['status'] == 'สำเร็จ'])
+            success_rate = (resolved/len(df)*100) if len(df) > 0 else 0
+            st.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{success_rate:.1f}%")
+            
+        with m3:
+            avg_csat = df['rating'].mean()
+            st.metric("คะแนนความพึงพอใจ", f"{avg_csat:.2f} ⭐" if not pd.isna(avg_csat) else "0.00 ⭐")
+            
+        with m4:
+            pending = len(df[df['status'] == 'รอตรวจสอบ'])
+            st.metric("งานค้างรอตรวจ", pending, delta=f"{pending} งาน", delta_color="inverse")
+
+        st.markdown("---")
+        
+        # ส่วนแสดงกราฟสถิติ
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("🏢 Workload by Department")
+            st.subheader("🏢 ปริมาณงานแยกตามแผนก")
+            # ปรับสีให้เข้ากับ Isuzu Corporate (Navy Blue)
             st.bar_chart(df['dept'].value_counts(), color="#0046ad")
+            
         with c2:
-            st.subheader("🛠️ Issue Categories")
+            st.subheader("🛠️ ประเภทปัญหาที่พบบ่อย")
             st.bar_chart(df['category'].value_counts(), color="#ff4b4b")
 
+        st.divider()
+
+        # ส่วนคะแนน CSAT 5 หัวข้อ
+        with st.expander("📊 ดูรายละเอียดคะแนนแยกตามหัวข้อประเมิน", expanded=True):
+            csat_stats = pd.DataFrame({
+                "หัวข้อการประเมิน": [
+                    "1. การสนับสนุนจากทีมงาน", 
+                    "2. คุณภาพการบริการ HW/SW", 
+                    "3. ความเป็นมืออาชีพ", 
+                    "4. ความตรงต่อเวลา", 
+                    "5. ความพึงพอใจในภาพรวม"
+                ],
+                "คะแนนเฉลี่ย": [
+                    df['q1'].mean(), df['q2'].mean(), 
+                    df['q3'].mean(), df['q4'].mean(), df['q5'].mean()
+                ]
+            })
+            st.table(csat_stats)
+
+        # ส่วนข้อเสนอแนะล่าสุด
+        st.subheader("💬 เสียงสะท้อนจากผู้ใช้งาน")
+        feedback_list = df[df['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+        
+        if not feedback_list.empty:
+            feedback_list.rename(columns={
+                'date': 'วันที่', 'user': 'ผู้แจ้ง', 
+                'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'
+            }, inplace=True)
+            st.dataframe(feedback_list, use_container_width=True, hide_index=True)
+        else:
+            st.info("ยังไม่มีข้อเสนอแนะเพิ่มเติมในขณะนี้")
+
+    else:
+        st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในฐานข้อมูล")
 # ==========================================
 # หน้าที่ 4: Assets (Detailed History)
 # ==========================================
