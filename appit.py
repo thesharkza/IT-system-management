@@ -314,34 +314,55 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         st.info("ยังไม่มีงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard (Full Analytics & UX/UI)
+# หน้าที่ 3: Dashboard (Full Analytics with Monthly Filter)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
     
-    # --- จุดสำคัญ: ต้องโหลดข้อมูลมาใส่ตัวแปร df ก่อนเรียกใช้งาน ---
-    df = load_table("tickets") 
-    # -------------------------------------------------------
+    # 1. โหลดข้อมูล
+    df = load_table("tickets")
 
     if not df.empty:
-        # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ (ใช้สไตล์ Card ที่เราตั้งค่าไว้ใน CSS)
+        # --- ระบบคัดกรองรายเดือน (Monthly Filter) ---
+        # แปลงคอลัมน์ date เป็น datetime object เพื่อให้ดึงเดือน/ปีง่ายขึ้น
+        df['date_dt'] = pd.to_datetime(df['date'])
+        
+        # สร้างชื่อเดือนภาษาไทยหรือรูปแบบ "Month Year"
+        df['month_year'] = df['date_dt'].dt.strftime('%m-%Y') # รูปแบบ 05-2026
+        
+        # สร้างรายการเดือนที่มีข้อมูลจริงในระบบเพื่อทำ Dropdown
+        month_list = sorted(df['month_year'].unique(), reverse=True)
+        month_options = ["ทั้งหมด"] + month_list
+        
+        # ส่วน UI สำหรับเลือกเดือน
+        col_filter1, col_filter2 = st.columns([1, 3])
+        with col_filter1:
+            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", month_options)
+        
+        # ทำการกรองข้อมูลตามเดือนที่เลือก
+        if selected_month != "ทั้งหมด":
+            df_filtered = df[df['month_year'] == selected_month].copy()
+            st.info(f"🔎 แสดงข้อมูลเฉพาะเดือน: **{selected_month}**")
+        else:
+            df_filtered = df.copy()
+            st.info("🔎 แสดงข้อมูลภาพรวมทั้งหมด")
+
+        # --- ส่วนแสดงผล (ใช้ df_filtered แทน df ทั้งหมด) ---
+        
+        # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ
         m1, m2, m3, m4 = st.columns(4)
-        
         with m1:
-            st.metric("งานแจ้งซ่อมทั้งหมด", len(df), help="จำนวนงานแจ้งซ่อมทั้งหมดในระบบ")
-        
+            st.metric("งานแจ้งซ่อม", len(df_filtered))
         with m2:
-            resolved = len(df[df['status'] == 'สำเร็จ'])
-            success_rate = (resolved/len(df)*100) if len(df) > 0 else 0
+            resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
+            success_rate = (resolved/len(df_filtered)*100) if len(df_filtered) > 0 else 0
             st.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{success_rate:.1f}%")
-            
         with m3:
-            avg_csat = df['rating'].mean()
-            st.metric("คะแนนความพึงพอใจ", f"{avg_csat:.2f} ⭐" if not pd.isna(avg_csat) else "0.00 ⭐")
-            
+            avg_csat = df_filtered['rating'].mean()
+            st.metric("คะแนนเฉลี่ย", f"{avg_csat:.2f} ⭐" if not pd.isna(avg_csat) else "0.00 ⭐")
         with m4:
-            pending = len(df[df['status'] == 'รอตรวจสอบ'])
-            st.metric("งานค้างรอตรวจ", pending, delta=f"{pending} งาน", delta_color="inverse")
+            pending = len(df_filtered[df_filtered['status'] == 'รอตรวจสอบ'])
+            st.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
 
         st.markdown("---")
         
@@ -349,17 +370,17 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         c1, c2 = st.columns(2)
         with c1:
             st.subheader("🏢 ปริมาณงานแยกตามแผนก")
-            # ปรับสีให้เข้ากับ Isuzu Corporate (Navy Blue)
-            st.bar_chart(df['dept'].value_counts(), color="#0046ad")
-            
+            if not df_filtered.empty:
+                st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
         with c2:
             st.subheader("🛠️ ประเภทปัญหาที่พบบ่อย")
-            st.bar_chart(df['category'].value_counts(), color="#ff4b4b")
+            if not df_filtered.empty:
+                st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
 
         st.divider()
 
         # ส่วนคะแนน CSAT 5 หัวข้อ
-        with st.expander("📊 ดูรายละเอียดคะแนนแยกตามหัวข้อประเมิน", expanded=True):
+        with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
             csat_stats = pd.DataFrame({
                 "หัวข้อการประเมิน": [
                     "1. การสนับสนุนจากทีมงาน", 
@@ -369,24 +390,21 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                     "5. ความพึงพอใจในภาพรวม"
                 ],
                 "คะแนนเฉลี่ย": [
-                    df['q1'].mean(), df['q2'].mean(), 
-                    df['q3'].mean(), df['q4'].mean(), df['q5'].mean()
+                    df_filtered['q1'].mean(), df_filtered['q2'].mean(), 
+                    df_filtered['q3'].mean(), df_filtered['q4'].mean(), df_filtered['q5'].mean()
                 ]
             })
             st.table(csat_stats)
 
         # ส่วนข้อเสนอแนะล่าสุด
-        st.subheader("💬 เสียงสะท้อนจากผู้ใช้งาน")
-        feedback_list = df[df['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+        st.subheader("💬 ข้อเสนอแนะในเดือนนี้")
+        feedback_list = df_filtered[df_filtered['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
         
         if not feedback_list.empty:
-            feedback_list.rename(columns={
-                'date': 'วันที่', 'user': 'ผู้แจ้ง', 
-                'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'
-            }, inplace=True)
+            feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
             st.dataframe(feedback_list, use_container_width=True, hide_index=True)
         else:
-            st.info("ยังไม่มีข้อเสนอแนะเพิ่มเติมในขณะนี้")
+            st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
 
     else:
         st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในฐานข้อมูล")
