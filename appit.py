@@ -3,6 +3,7 @@ import pandas as pd
 import base64
 from datetime import datetime
 from supabase import create_client, Client
+from streamlit_calendar import calendar
 
 # --- CUSTOM UI STYLING ---
 st.markdown("""
@@ -440,28 +441,94 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
         else: st.info("ไม่มีประวัติการซ่อม")
 
 # ==========================================
-# หน้าที่ 5: PM (Checklist)
+# หน้าที่ 5: แผนบำรุงรักษา (PM) + Calendar View
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
-    st.header("Preventive Maintenance")
-    with st.expander("เพิ่มแผน PM"):
-        with st.form("new_pm"):
-            pm_n = st.text_input("ชื่องาน")
-            pm_d = st.date_input("กำหนดวันทำ")
-            pm_c = st.text_area("Checklist")
-            if st.form_submit_button("บันทึก"):
-                insert_data("pm_schedules", {"id":f"PM-{datetime.now().microsecond}","task_name":pm_n,"next_due_date":str(pm_d),"status":"Scheduled","checklist":pm_c})
-                st.rerun()
+    st.title("🔧 Preventive Maintenance Planner")
     
-    df_p = load_table("pm_schedules")
-    if not df_p.empty:
-        st.dataframe(df_p, use_container_width=True, hide_index=True)
-        st.divider()
-        sel_pm = st.selectbox("บันทึกผล PM", df_p[df_p['status']!='Completed']['id'].tolist())
-        pm_target = df_p[df_p['id']==sel_pm].iloc[0]
-        st.warning(f"**Checklist:** {pm_target['checklist']}")
-        with st.form("pm_fin"):
-            res = st.text_area("ผลการตรวจ")
-            if st.form_submit_button("ปิดงาน PM"):
-                update_pm_full(sel_pm, "Completed", res)
+    tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการทั้งหมด", "➕ เพิ่มแผนใหม่"])
+
+    # โหลดข้อมูล PM
+    df_pm = load_table("pm_schedules")
+
+    # --- Tab 1: ปฏิทินงาน PM ---
+    with tab_cal:
+        if not df_pm.empty:
+            # แปลงข้อมูลในตารางให้เป็นรูปแบบ Events ของปฏิทิน
+            calendar_events = []
+            for _, row in df_pm.iterrows():
+                # กำหนดสีตามสถานะ
+                event_color = "#2e7d32" if row['status'] == "Completed" else "#0046ad"
+                
+                calendar_events.append({
+                    "title": f"🛠️ {row['task_name']}",
+                    "start": row['next_due_date'],
+                    "end": row['next_due_date'],
+                    "color": event_color,
+                    "id": row['id']
+                })
+
+            # ตั้งค่าปฏิทิน
+            calendar_options = {
+                "headerToolbar": {
+                    "left": "prev,next today",
+                    "center": "title",
+                    "right": "dayGridMonth,timeGridWeek"
+                },
+                "initialView": "dayGridMonth",
+                "selectable": True,
+            }
+
+            # แสดงผลปฏิทิน
+            state = calendar(
+                events=calendar_events,
+                options=calendar_options,
+                key="pm_calendar",
+            )
+            
+            if state.get("eventClick"):
+                st.toast(f"งานที่เลือก: {state['eventClick']['event']['title']}")
+        else:
+            st.info("ยังไม่มีแผนงาน PM ในระบบ")
+
+    # --- Tab 2: รายการทั้งหมด (ตารางเดิมที่คุณมี) ---
+    with tab_list:
+        if not df_pm.empty:
+            st.dataframe(df_pm, use_container_width=True, hide_index=True)
+            st.divider()
+            # ส่วนบันทึกผลการตรวจ (อ้างอิงจากโค้ดเดิม)
+            pending_pm = df_pm[df_pm['status'] != 'Completed']
+            if not pending_pm.empty:
+                sel_pm = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending_pm['id'].tolist())
+                pm_target = df_pm[df_pm['id'] == sel_pm].iloc[0]
+                st.warning(f"**Checklist:** {pm_target['checklist']}")
+                with st.form("pm_completion_form"):
+                    res = st.text_area("บันทึกผลการตรวจสอบ")
+                    if st.form_submit_button("บันทึกและปิดงาน PM"):
+                        update_pm_full(sel_pm, "Completed", res)
+                        st.success("บันทึกผลสำเร็จ")
+                        st.rerun()
+
+    # --- Tab 3: เพิ่มแผนใหม่ ---
+    with tab_add:
+        with st.form("new_pm_plan"):
+            p1, p2 = st.columns(2)
+            with p1:
+                pm_name = st.text_input("ชื่อแผนงาน (เช่น ตรวจเช็ค UPS รายเดือน)")
+                pm_date = st.date_input("วันที่กำหนดทำ")
+            with p2:
+                pm_id = f"PM-{datetime.now().strftime('%f')}"
+                st.write(f"ID งาน: {pm_id}")
+            
+            pm_check = st.text_area("รายการ Checklist (แยกบรรทัด)")
+            
+            if st.form_submit_button("เพิ่มแผนงาน"):
+                insert_data("pm_schedules", {
+                    "id": pm_id,
+                    "task_name": pm_name,
+                    "next_due_date": str(pm_date),
+                    "status": "Scheduled",
+                    "checklist": pm_check
+                })
+                st.success("เพิ่มแผนงานสำเร็จ!")
                 st.rerun()
