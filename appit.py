@@ -181,33 +181,63 @@ if page == "📝 แจ้งซ่อม (User)":
 # หน้าที่ 2: จัดการงานซ่อม (ช่าง)
 # ==========================================
 elif page == "💻 จัดการงานซ่อม (ช่าง)" and st.session_state.is_admin:
-    st.header("จัดการงานซ่อม")
+    st.header("💻 รายการงานซ่อมและอัปเดตสถานะ")
     df_tickets = load_table("tickets")
+    
     if not df_tickets.empty:
-        st.dataframe(df_tickets[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']], use_container_width=True)
+        # 1. เตรียมตารางสำหรับแสดงผล (เปลี่ยนชื่อหัวข้อให้เหมือนหน้า User)
+        df_manage_view = df_tickets[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']].copy()
+        
+        # เรียงลำดับงาน (Pending ขึ้นก่อน)
+        sort_map = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
+        df_manage_view['sort'] = df_manage_view['status'].map(sort_map)
+        df_manage_view = df_manage_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
+
+        df_manage_view.rename(columns={
+            'id': 'รหัสงาน',
+            'date': 'วันที่แจ้ง',
+            'user': 'ผู้แจ้ง',
+            'dept': 'แผนก',
+            'category': 'ประเภท',
+            'urgency': 'ความเร่งด่วน',
+            'status': 'สถานะ'
+        }, inplace=True)
+
+        # 2. ฟังก์ชันลงสี (อ้างอิงจากฟังก์ชันเดิมของคุณ)
+        def color_status(val):
+            if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
+            elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17; font-weight: bold'
+            elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a; font-weight: bold'
+            elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold'
+            return ''
+
+        try:
+            styled_manage = df_manage_view.style.applymap(color_status, subset=['สถานะ'])
+        except:
+            styled_manage = df_manage_view.style.map(color_status, subset=['สถานะ'])
+
+        # แสดงตารางแบบสวยงาม
+        st.dataframe(styled_manage, use_container_width=True, hide_index=True)
+        
         st.divider()
         
-        selected_id = st.selectbox("เลือกรหัสงาน", df_tickets['id'].tolist())
+        # --- ส่วนฟอร์มแก้ไขข้อมูล (ยังคงใช้ ID เดิมในการ Query) ---
+        st.subheader("🔧 อัปเดตรายละเอียดงานและปิดจ๊อบ")
+        selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_tickets['id'].tolist())
         tk = df_tickets[df_tickets['id'] == selected_id].iloc[0]
         
-        # เริ่ม Form
         with st.form("edit_job_form"):
             c1, c2 = st.columns(2)
             with c1:
                 st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
                 
-                # --- จุดที่แก้: ตรวจสอบรูปภาพก่อนแสดงผล เพื่อไม่ให้ Error ---
+                # เช็คและแสดงรูปภาพ
                 img_path = tk.get('image_path', '')
                 if img_path and str(img_path).startswith('data:image'):
-                    try:
-                        st.image(img_path, caption="รูปภาพประกอบปัญหา", width=400)
-                    except Exception as e:
-                        st.error("ไม่สามารถแสดงรูปภาพได้")
-                elif img_path:
-                    st.warning(f"📎 มีข้อมูลไฟล์แนบเดิม: {img_path} (ไม่สามารถแสดงผลเป็นรูปได้)")
-                # -----------------------------------------------------
-
-                n_status = st.selectbox("สถานะ", ticket_statuses, index=ticket_statuses.index(tk['status']))
+                    try: st.image(img_path, caption="รูปภาพประกอบปัญหา", width=400)
+                    except: st.error("ไม่สามารถแสดงรูปภาพได้")
+                
+                n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
                 assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') if pd.notna(tk.get('assignee')) else "")
             
             with c2:
@@ -215,13 +245,14 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
                 sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') if pd.notna(tk.get('solution')) else "")
                 cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost')) if pd.notna(tk.get('cost')) else 0.0)
             
-            # --- จุดที่แก้: ย้ายปุ่ม Submit มาไว้ในฟอร์มให้ชัดเจน ---
             submitted = st.form_submit_button("บันทึกข้อมูลงานซ่อม")
             
             if submitted:
                 update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
-                st.success("✅ บันทึกข้อมูลสำเร็จ!")
+                st.success(f"✅ บันทึกข้อมูลงาน {selected_id} สำเร็จ!")
                 st.rerun()
+    else:
+        st.info("ยังไม่มีงานซ่อมในระบบ")
 
 # ==========================================
 # หน้าที่ 3: Dashboard (Full CSAT)
