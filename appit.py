@@ -507,10 +507,20 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
     
-    # แยกส่วนการทำงานด้วย Tabs
+    # 1. บรรทัดที่สร้างตัวแปรต้องมีชื่อ tab_add อยู่ด้วย
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
 
-    df_pm = load_table("pm_schedules")
+    # 2. บรรทัดด้านล่างต้องย่อหน้า (Tab) เข้าไปให้ตรงกัน
+    with tab_cal:
+        # โค้ดปฏิทิน...
+        pass # แทนที่ด้วยโค้ดเดิม
+
+    with tab_list:
+        # โค้ดรายการ...
+        pass # แทนที่ด้วยโค้ดเดิม
+
+    with tab_add: # <--- ตรวจสอบว่าบรรทัดนี้เยื้อง (Indent) ตรงกับ with tab_cal:
+        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
 
     # --- Tab 1: ปฏิทินงาน PM (แสดงภาพรวม) ---
     with tab_cal:
