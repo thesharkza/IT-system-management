@@ -3,11 +3,9 @@ import pandas as pd
 from datetime import datetime
 from supabase import create_client, Client
 
-# --- ตั้งค่าหน้าเว็บ (ต้องอยู่บรรทัดแรกสุดของ Streamlit) ---
-st.set_page_config(page_title="IT Helpdesk Online", layout="wide")
+st.set_page_config(page_title="IT Management System", layout="wide", initial_sidebar_state="expanded")
 
 # --- DATABASE SETUP (Supabase) ---
-# ดึงค่า URL และ Key จากไฟล์ .streamlit/secrets.toml
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -16,81 +14,186 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-def save_ticket(ticket_id, date, user, dept, cat, desc, status):
-    # บันทึกข้อมูลลงตาราง tickets ใน Supabase
-    data, count = supabase.table("tickets").insert({
-        "id": ticket_id, 
-        "date": date, 
-        "user": user, 
-        "dept": dept, 
-        "category": cat, 
-        "desc": desc, 
-        "status": status
-    }).execute()
+# ฟังก์ชันจัดการฐานข้อมูลทั่วไป
+def load_table(table_name):
+    response = supabase.table(table_name).select("*").execute()
+    return pd.DataFrame(response.data) if response.data else pd.DataFrame()
 
-def update_ticket_status(ticket_id, new_status):
-    # อัปเดตสถานะงาน
-    data, count = supabase.table("tickets").update({"status": new_status}).eq("id", ticket_id).execute()
+def insert_data(table_name, data_dict):
+    supabase.table(table_name).insert(data_dict).execute()
 
-def load_data():
-    # ดึงข้อมูลทั้งหมดมาแสดงผล
-    response = supabase.table("tickets").select("*").execute()
-    # แปลงข้อมูลที่ได้จาก Supabase เป็น Pandas DataFrame เพื่อให้แสดงตารางสวยงาม
-    if response.data:
-        return pd.DataFrame(response.data)
-    else:
-        return pd.DataFrame()
+def update_status(table_name, record_id, new_status):
+    supabase.table(table_name).update({"status": new_status}).eq("id", record_id).execute()
 
-# --- STREAMLIT UI ---
-st.title("🛠️ IT Task Management System")
+# --- เมนูหลัก ---
+st.sidebar.title("🛠️ IT System Menu")
+page = st.sidebar.radio("เลือกหน้าต่างการทำงาน", [
+    "📝 แจ้งปัญหา (User)", 
+    "💻 จัดการตั๋วงาน (Helpdesk)", 
+    "📊 สรุปภาพรวม (Dashboard)", 
+    "🗄️ ฐานข้อมูลอุปกรณ์ (Assets)", 
+    "🔧 แผนบำรุงรักษา (PM)"
+])
 
-page = st.sidebar.radio("เมนู", ["📝 แจ้งเรื่อง (User)", "💻 จัดการงาน (IT Admin)"])
+# รายชื่อแผนกหลัก
+depts = ["MAT", "KD1", "QC", "Office", "Other"]
 
-if page == "📝 แจ้งเรื่อง (User)":
-    st.header("ฟอร์มแจ้งปัญหา")
+# ==========================================
+# หน้าที่ 1: แจ้งปัญหา (User)
+# ==========================================
+if page == "📝 แจ้งปัญหา (User)":
+    st.header("ฟอร์มแจ้งปัญหาการใช้งาน / ขอรับบริการ")
     with st.form("ticket_form"):
         col1, col2 = st.columns(2)
         with col1:
             user_name = st.text_input("ชื่อผู้แจ้ง")
-            department = st.selectbox("แผนก", ["MAT", "KD1", "QC", "Office", "Other"]) 
+            department = st.selectbox("แผนก", depts) 
         with col2:
-            category = st.selectbox("ประเภทปัญหา", ["Hardware", "Software", "Network", "Account", "Other"])
+            category = st.selectbox("ประเภทปัญหา", ["Hardware", "Software (เช่น MS Office)", "Network", "Account/Access", "Other"])
+            asset_id = st.text_input("รหัสอุปกรณ์ที่มีปัญหา (ถ้าทราบ)")
             
         description = st.text_area("รายละเอียดปัญหา")
         submitted = st.form_submit_button("ส่งข้อมูลแจ้ง IT")
 
         if submitted and user_name and description:
-            df_existing = load_data()
-            # คำนวณ Ticket ID ถัดไป
-            current_count = len(df_existing) if not df_existing.empty else 0
-            ticket_id = f"IT-{current_count + 1:04d}"
+            df_existing = load_table("tickets")
+            ticket_id = f"IT-{len(df_existing) + 1:04d}"
             date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            save_ticket(ticket_id, date_str, user_name, department, category, description, "Pending")
-            st.success(f"✅ บันทึกสำเร็จ! หมายเลขงานของคุณคือ {ticket_id}")
+            # รวมรหัสอุปกรณ์ไปในรายละเอียดเพื่อให้ง่ายต่อการดู
+            full_desc = f"[Asset: {asset_id}] {description}" if asset_id else description
+            
+            insert_data("tickets", {
+                "id": ticket_id, "date": date_str, "user": user_name, 
+                "dept": department, "category": category, "desc": full_desc, "status": "Pending"
+            })
+            st.success(f"✅ บันทึกสำเร็จ! หมายเลขงาน: {ticket_id}")
 
-elif page == "💻 จัดการงาน (IT Admin)":
-    st.header("Dashboard จัดการงาน IT")
+# ==========================================
+# หน้าที่ 2: จัดการตั๋วงาน (IT Helpdesk)
+# ==========================================
+elif page == "💻 จัดการตั๋วงาน (Helpdesk)":
+    st.header("กระดานจัดการงาน IT")
+    df_tickets = load_table("tickets")
     
-    # โหลดข้อมูลจาก Supabase
-    df = load_data()
-    
-    if df.empty:
-        st.info("🎉 เยี่ยมมาก! ยังไม่มีงานในระบบ")
+    if df_tickets.empty:
+        st.info("ไม่มีงานค้างในระบบ")
     else:
-        # จัดเรียงคอลัมน์ให้ดูง่ายขึ้น
-        df = df[['id', 'date', 'user', 'dept', 'category', 'desc', 'status']]
-        st.dataframe(df, use_container_width=True)
+        df_tickets = df_tickets[['id', 'date', 'user', 'dept', 'category', 'desc', 'status']]
+        st.dataframe(df_tickets, use_container_width=True)
         st.divider()
         
         st.subheader("🔄 อัปเดตสถานะงาน")
         col_a, col_b = st.columns(2)
         with col_a:
-            tid = st.selectbox("เลือก Ticket ID", df['id'].tolist())
+            tid = st.selectbox("เลือก Ticket ID", df_tickets['id'].tolist())
         with col_b:
             new_st = st.selectbox("สถานะใหม่", ["Pending", "In Progress", "Resolved"])
+        if st.button("บันทึกสถานะงาน"):
+            update_status("tickets", tid, new_st)
+            st.success("อัปเดตเรียบร้อย!")
+            st.rerun()
+
+# ==========================================
+# หน้าที่ 3: สรุปภาพรวม (Dashboard)
+# ==========================================
+elif page == "📊 สรุปภาพรวม (Dashboard)":
+    st.header("สถิติและประสิทธิภาพการทำงาน")
+    df_tickets = load_table("tickets")
+    
+    if df_tickets.empty:
+        st.warning("ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟ")
+    else:
+        # สรุปตัวเลข
+        col1, col2, col3 = st.columns(3)
+        total_tickets = len(df_tickets)
+        resolved = len(df_tickets[df_tickets['status'] == 'Resolved'])
+        pending = len(df_tickets[df_tickets['status'] == 'Pending'])
         
-        if st.button("อัปเดตสถานะ"):
-            update_ticket_status(tid, new_st)
-            st.success(f"อัปเดตงาน {tid} เป็น {new_st} เรียบร้อย!")
+        col1.metric("งานทั้งหมด", total_tickets)
+        col2.metric("เสร็จสิ้นแล้ว", resolved)
+        col3.metric("รอดำเนินการ", pending)
+        
+        st.divider()
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.subheader("จำนวนงานแยกตามแผนก")
+            dept_counts = df_tickets['dept'].value_counts()
+            st.bar_chart(dept_counts)
+            
+        with col_chart2:
+            st.subheader("จำนวนงานแยกตามประเภท")
+            cat_counts = df_tickets['category'].value_counts()
+            st.bar_chart(cat_counts)
+
+# ==========================================
+# หน้าที่ 4: ฐานข้อมูลอุปกรณ์ (Asset Inventory)
+# ==========================================
+elif page == "🗄️ ฐานข้อมูลอุปกรณ์ (Assets)":
+    st.header("ทะเบียนทรัพย์สิน IT")
+    
+    with st.expander("➕ เพิ่มอุปกรณ์ใหม่"):
+        with st.form("asset_form"):
+            a1, a2 = st.columns(2)
+            with a1:
+                asset_id = st.text_input("รหัสทรัพย์สิน (เช่น PC-001, PRN-005)")
+                asset_type = st.selectbox("ประเภท", ["PC/Laptop", "Printer/Scanner", "Network Switch", "UPS", "Other"])
+            with a2:
+                asset_model = st.text_input("ยี่ห้อ / รุ่น")
+                asset_dept = st.selectbox("ประจำแผนก", depts)
+            
+            if st.form_submit_button("บันทึกอุปกรณ์"):
+                if asset_id:
+                    insert_data("assets", {
+                        "id": asset_id, "type": asset_type, "model": asset_model, 
+                        "dept": asset_dept, "status": "Active"
+                    })
+                    st.success("✅ เพิ่มอุปกรณ์ลงระบบแล้ว")
+                    st.rerun()
+
+    df_assets = load_table("assets")
+    if not df_assets.empty:
+        st.dataframe(df_assets[['id', 'type', 'model', 'dept', 'status']], use_container_width=True)
+
+# ==========================================
+# หน้าที่ 5: แผนบำรุงรักษา (PM Schedule)
+# ==========================================
+elif page == "🔧 แผนบำรุงรักษา (PM)":
+    st.header("ระบบแผนงาน Preventive Maintenance")
+    
+    with st.expander("➕ เพิ่มแผน PM ใหม่"):
+        with st.form("pm_form"):
+            p1, p2 = st.columns(2)
+            with p1:
+                pm_name = st.text_input("หัวข้องาน (เช่น เปลี่ยนแบต UPS, ตรวจเช็ค Zabbix Server)")
+                pm_freq = st.selectbox("ความถี่", ["รายสัปดาห์", "รายเดือน", "รายไตรมาส", "รายปี"])
+            with p2:
+                pm_date = st.date_input("วันที่ต้องดำเนินการครั้งถัดไป")
+            
+            if st.form_submit_button("สร้างแผน PM"):
+                if pm_name:
+                    df_pm = load_table("pm_schedules")
+                    pm_id = f"PM-{len(df_pm) + 1:03d}"
+                    insert_data("pm_schedules", {
+                        "id": pm_id, "task_name": pm_name, "frequency": pm_freq, 
+                        "next_due_date": str(pm_date), "status": "Scheduled"
+                    })
+                    st.success("✅ สร้างแผนเรียบร้อย")
+                    st.rerun()
+
+    df_pm = load_table("pm_schedules")
+    if not df_pm.empty:
+        st.dataframe(df_pm[['id', 'task_name', 'frequency', 'next_due_date', 'status']], use_container_width=True)
+        
+        st.divider()
+        st.subheader("✔️ อัปเดตสถานะงาน PM")
+        c1, c2 = st.columns(2)
+        with c1:
+            pm_update_id = st.selectbox("เลือก PM ID", df_pm['id'].tolist())
+        with c2:
+            pm_new_st = st.selectbox("อัปเดตสถานะ", ["Scheduled", "Completed", "Overdue"])
+        if st.button("อัปเดต PM"):
+            update_status("pm_schedules", pm_update_id, pm_new_st)
+            st.success("อัปเดตสถานะ PM เรียบร้อย!")
             st.rerun()
