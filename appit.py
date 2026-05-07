@@ -41,6 +41,24 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
+# --- เพิ่มฟังก์ชันอัปเดตคะแนน 5 ข้อ ---
+def update_csat_full(record_id, q1, q2, q3, q4, q5, feedback):
+    supabase.table("tickets").update({
+        "q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5,
+        "feedback": feedback,
+        "rating": (q1+q2+q3+q4+q5)/5  # เก็บค่าเฉลี่ยรวมไว้ด้วย
+    }).eq("id", record_id).execute()
+
+# --- นิยามระดับความพึงพอใจ ---
+rating_scale = {
+    "พอใจมากที่สุด": 5,
+    "พอใจ": 4,
+    "ปานกลาง": 3,
+    "ไม่พอใจ": 2,
+    "ไม่พอใจอย่างมาก": 1
+}
+scale_options = list(rating_scale.keys())
+
 # --- LOGIN SYSTEM ---
 ADMIN_PASSWORD = "itpassword123"
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
