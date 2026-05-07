@@ -30,11 +30,18 @@ def update_ticket_full(record_id, status, assignee, root_cause, solution, cost):
     }).eq("id", record_id).execute()
 
 def update_csat_full(record_id, q1, q2, q3, q4, q5, feedback):
-    # คำนวณคะแนนเฉลี่ยเพื่อเก็บในคอลัมน์ rating เดิม
+    # คำนวณค่าเฉลี่ย
     avg_score = (q1 + q2 + q3 + q4 + q5) / 5
+    
+    # ปรับปรุง: ใช้ round() เพื่อให้มั่นใจว่าเป็นตัวเลขที่เหมาะสม
     supabase.table("tickets").update({
-        "q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5,
-        "feedback": feedback, "rating": avg_score
+        "q1": int(q1), 
+        "q2": int(q2), 
+        "q3": int(q3), 
+        "q4": int(q4), 
+        "q5": int(q5),
+        "feedback": feedback, 
+        "rating": round(avg_score, 2) # เก็บเป็นทศนิยม 2 ตำแหน่ง
     }).eq("id", record_id).execute()
 
 def update_pm_full(record_id, status, pm_result):
