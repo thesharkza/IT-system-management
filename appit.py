@@ -4,9 +4,9 @@ import base64
 from datetime import datetime
 from supabase import create_client, Client
 
-st.set_page_config(page_title="Enterprise CMMS", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Enterprise CMMS & CSAT", layout="wide", initial_sidebar_state="expanded")
 
-# --- DATABASE SETUP (Supabase) ---
+# --- DATABASE SETUP ---
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -31,116 +31,107 @@ def update_ticket_full(record_id, status, assignee, root_cause, solution, cost):
         "solution": solution, "cost": cost
     }).eq("id", record_id).execute()
 
+def update_csat(record_id, rating, feedback):
+    supabase.table("tickets").update({
+        "rating": rating, "feedback": feedback
+    }).eq("id", record_id).execute()
+
 def update_pm_full(record_id, status, pm_result):
     supabase.table("pm_schedules").update({
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
-# ==========================================
-# ระบบ LOGIN
-# ==========================================
+# --- LOGIN SYSTEM ---
 ADMIN_PASSWORD = "itpassword123"
+if "is_admin" not in st.session_state: st.session_state.is_admin = False
 
-if "is_admin" not in st.session_state:
-    st.session_state.is_admin = False
-
-st.sidebar.title("🔐 สำหรับเจ้าหน้าที่ IT")
+st.sidebar.title("🔐 IT Authorization")
 if not st.session_state.is_admin:
-    admin_pass = st.sidebar.text_input("ใส่รหัสผ่านเพื่อเข้าโหมดจัดการ", type="password")
-    if st.sidebar.button("เข้าสู่ระบบ"):
+    admin_pass = st.sidebar.text_input("Admin Password", type="password")
+    if st.sidebar.button("Login"):
         if admin_pass == ADMIN_PASSWORD:
             st.session_state.is_admin = True
             st.rerun()
-        else:
-            st.sidebar.error("❌ รหัสผ่านไม่ถูกต้อง")
+        else: st.sidebar.error("Incorrect Password")
 else:
-    st.sidebar.success("✅ โหมดช่าง/IT ทำงาน")
-    if st.sidebar.button("ออกจากระบบ (Logout)"):
+    st.sidebar.success("IT Admin Mode Active")
+    if st.sidebar.button("Logout"):
         st.session_state.is_admin = False
         st.rerun()
 
 st.sidebar.divider()
+st.sidebar.title("🛠️ Menu")
+menu_options = ["📝 แจ้งซ่อม (User)", "💻 จัดการงานซ่อม (ช่าง)", "📊 Dashboard", "🗄️ ทะเบียนอุปกรณ์", "🔧 แผนบำรุงรักษา (PM)"] if st.session_state.is_admin else ["📝 แจ้งซ่อม (User)"]
+page = st.sidebar.radio("Go to", menu_options)
 
-st.sidebar.title("🛠️ ระบบจัดการงานซ่อม")
-
-if st.session_state.is_admin:
-    menu_options = [
-        "📝 แจ้งซ่อม (User)", "💻 จัดการงานซ่อม (ช่าง)", 
-        "📊 Dashboard", "🗄️ ทะเบียนอุปกรณ์", "🔧 แผนบำรุงรักษา (PM)"
-    ]
-else:
-    menu_options = ["📝 แจ้งซ่อม (User)"]
-
-page = st.sidebar.radio("เลือกหน้าต่างการทำงาน", menu_options)
 depts = ["MAT", "KD1", "QC", "Office", "Other"]
 ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
 
 # ==========================================
-# หน้าที่ 1: แจ้งซ่อม (User)
+# หน้าที่ 1: แจ้งซ่อม & ประเมินผล (User)
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
-    st.header("ฟอร์มแจ้งซ่อมออนไลน์")
-    with st.form("ticket_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            user_name = st.text_input("ชื่อผู้แจ้ง")
-            department = st.selectbox("แผนก", depts) 
-            category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
-        with col2:
-            asset_id_input = st.text_input("รหัสอุปกรณ์ (เช่น PC-001) *ถ้ามี") 
-            urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
-            uploaded_file = st.file_uploader("แนบไฟล์รูปภาพปัญหา (ถ้ามี)", type=['png', 'jpg', 'jpeg'])
-            
-        description = st.text_area("รายละเอียดปัญหา")
-        submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
-
-        if submitted and user_name and description:
-            df_existing = load_table("tickets")
-            ticket_id = f"JOB-{len(df_existing) + 1:04d}"
-            date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            # แปลงไฟล์รูปภาพเป็น Base64 เพื่อเก็บลง Database (ถ้ามีการแนบไฟล์)
-            if uploaded_file is not None:
-                img_bytes = uploaded_file.getvalue()
-                encoded_img = base64.b64encode(img_bytes).decode('utf-8')
-                image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
-            else:
+    st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
+    
+    tab1, tab2 = st.tabs(["🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
+    
+    with tab1:
+        with st.form("ticket_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                user_name = st.text_input("ชื่อผู้แจ้ง")
+                department = st.selectbox("แผนก", depts) 
+                category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
+            with c2:
+                asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
+                urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
+                uploaded_file = st.file_uploader("แนบรูปภาพ", type=['png', 'jpg', 'jpeg'])
+            description = st.text_area("รายละเอียดปัญหา")
+            if st.form_submit_button("ส่งเรื่องแจ้งซ่อม"):
+                df_existing = load_table("tickets")
+                ticket_id = f"JOB-{len(df_existing) + 1:04d}"
                 image_data = ""
-            
-            insert_data("tickets", {
-                "id": ticket_id, "date": date_str, "user": user_name, 
-                "dept": department, "category": category, "desc": description, 
-                "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data,
-                "asset_id": asset_id_input 
-            })
-            st.success(f"✅ บันทึกสำเร็จ! หมายเลขงาน: {ticket_id}")
-            st.rerun()
+                if uploaded_file:
+                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+                
+                insert_data("tickets", {
+                    "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
+                    "dept": department, "category": category, "desc": description, 
+                    "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data, "asset_id": asset_id_input 
+                })
+                st.success(f"บันทึกสำเร็จ! รหัสงาน: {ticket_id}")
+                st.rerun()
+
+    with tab2:
+        st.subheader("งานซ่อมที่รอการประเมิน")
+        df_all = load_table("tickets")
+        if not df_all.empty:
+            # กรองเฉพาะงานที่สำเร็จ แต่ยังไม่มีคะแนน
+            ready_to_rate = df_all[(df_all['status'] == 'สำเร็จ') & (df_all['rating'].isna())]
+            if not ready_to_rate.empty:
+                selected_job = st.selectbox("เลือกงานซ่อมที่คุณต้องการประเมิน", ready_to_rate['id'].tolist())
+                job_info = ready_to_rate[ready_to_rate['id'] == selected_job].iloc[0]
+                
+                st.info(f"**ช่างผู้ดูแล:** {job_info.get('assignee', 'ไม่ระบุ')} | **วิธีแก้ไข:** {job_info.get('solution', '-')}")
+                
+                with st.form("csat_form"):
+                    rating = st.select_slider("คะแนนความพึงพอใจ (1-5)", options=[1, 2, 3, 4, 5], value=5)
+                    feedback = st.text_area("ข้อเสนอแนะเพิ่มเติม")
+                    if st.form_submit_button("บันทึกการประเมิน"):
+                        update_csat(selected_job, rating, feedback)
+                        st.success("ขอบคุณสำหรับคำแนะนำครับ!")
+                        st.rerun()
+            else:
+                st.write("ไม่มีงานซ่อมที่รอการประเมินในขณะนี้")
 
     st.divider()
-    st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
+    st.subheader("📋 สถานะงานซ่อมปัจจุบัน")
     df_tickets = load_table("tickets")
     if not df_tickets.empty:
-        df_user_view = df_tickets[['id', 'date', 'user', 'category', 'urgency', 'status']].copy()
-        sort_mapping = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
-        df_user_view['sort_order'] = df_user_view['status'].map(sort_mapping)
-        df_user_view = df_user_view.sort_values(by=['sort_order', 'date'], ascending=[True, False]).drop('sort_order', axis=1)
-        
-        df_user_view.rename(columns={
-            'id': 'รหัสงาน', 'date': 'เวลาที่แจ้ง', 'user': 'ผู้แจ้ง',
-            'category': 'ประเภท', 'urgency': 'ความเร่งด่วน', 'status': 'สถานะ'
-        }, inplace=True)
-        
-        def color_status(val):
-            if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828'
-            elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17'
-            elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a'
-            elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32'
-            return ''
-        try:
-            styled_df = df_user_view.style.applymap(color_status, subset=['สถานะ'])
-        except AttributeError:
-            styled_df = df_user_view.style.map(color_status, subset=['สถานะ'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        df_view = df_tickets[['id', 'date', 'user', 'category', 'status', 'rating']].copy()
+        df_view.rename(columns={'id':'รหัสงาน','date':'วันที่แจ้ง','user':'ผู้แจ้ง','category':'ประเภท','status':'สถานะ','rating':'คะแนน'}, inplace=True)
+        st.dataframe(df_view, use_container_width=True, hide_index=True)
 
 # ==========================================
 # หน้าที่ 2: จัดการงานซ่อม (ช่าง)
@@ -187,21 +178,23 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
 # หน้าที่ 3: สรุปภาพรวม (Dashboard)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
-    st.header("สถิติและประสิทธิภาพการทำงาน")
+    st.header("สรุปภาพรวมและประสิทธิภาพการบริการ")
     df_tickets = load_table("tickets")
     if not df_tickets.empty:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("งานทั้งหมด", len(df_tickets))
-        col2.metric("สำเร็จแล้ว", len(df_tickets[df_tickets['status'] == 'สำเร็จ']))
-        col3.metric("รอตรวจสอบ", len(df_tickets[df_tickets['status'] == 'รอตรวจสอบ']))
+        # สรุป CSAT
+        avg_rating = df_tickets['rating'].mean()
+        total_rated = df_tickets['rating'].count()
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("งานทั้งหมด", len(df_tickets))
+        c2.metric("สำเร็จแล้ว", len(df_tickets[df_tickets['status'] == 'สำเร็จ']))
+        c3.metric("คะแนนเฉลี่ย CSAT", f"{avg_rating:.2f} / 5" if not pd.isna(avg_rating) else "-")
+        c4.metric("ผู้ประเมิน", f"{total_rated} ท่าน")
+        
         st.divider()
-        col_chart1, col_chart2 = st.columns(2)
-        with col_chart1:
-            st.subheader("จำนวนงานแยกตามแผนก")
-            st.bar_chart(df_tickets['dept'].value_counts())
-        with col_chart2:
-            st.subheader("จำนวนงานแยกตามประเภท")
-            st.bar_chart(df_tickets['category'].value_counts())
+        st.subheader("ความคิดเห็นจากผู้ใช้งาน")
+        feedback_list = df_tickets[df_tickets['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+        st.dataframe(feedback_list, use_container_width=True, hide_index=True)
 
 # ==========================================
 # หน้าที่ 4: ทะเบียนอุปกรณ์ และประวัติการซ่อม (Asset Management)
