@@ -509,29 +509,26 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                         st.success("บันทึกผลสำเร็จ")
                         st.rerun()
 
-    # --- Tab 3: เพิ่มแผนใหม่ (กลับมาใช้รูปแบบเดิมที่คุณคุ้นเคย) ---
+    # --- Tab 3: เพิ่มแผนใหม่ ---
     with tab_add:
-        st.subheader("➕ ลงทะเบียนแผนการบำรุงรักษา")
-        with st.form("new_pm_original_style"):
-            # กลับมาใช้ตัวแปรและการวางรูปแบบเดิม
-            pm_n = st.text_input("ชื่องาน (Task Name)")
-            pm_d = st.date_input("กำหนดวันทำ (Next Due Date)")
-            pm_c = st.text_area("รายการ Checklist / รายละเอียด")
+        with st.form("new_pm_plan"):
+            p1, p2 = st.columns(2)
+            with p1:
+                pm_name = st.text_input("ชื่อแผนงาน (เช่น ตรวจเช็ค UPS รายเดือน)")
+                pm_date = st.date_input("วันที่กำหนดทำ")
+            with p2:
+                pm_id = f"PM-{datetime.now().strftime('%f')}"
+                st.write(f"ID งาน: {pm_id}")
             
-            if st.form_submit_button("บันทึกแผนงาน"):
-                if pm_n and pm_c:
-                    # สร้าง ID แบบสั้นเพื่อให้ระบบทำงานได้
-                    pm_id = f"PM-{datetime.now().strftime('%M%S')}"
-                    
-                    insert_data("pm_schedules", {
-                        "id": pm_id,
-                        "task_name": pm_n,
-                        "next_due_date": str(pm_d),
-                        "status": "Scheduled",
-                        "checklist": pm_c
-                    })
-                    st.toast("บันทึกแผนงานสำเร็จ!", icon="✅")
-                    st.success(f"เพิ่มแผนงาน: {pm_n} เรียบร้อยแล้ว")
-                    st.rerun()
-                else:
-                    st.error("กรุณากรอกชื่องานและรายการ Checklist ให้ครบถ้วน")
+            pm_check = st.text_area("รายการ Checklist (แยกบรรทัด)")
+            
+            if st.form_submit_button("เพิ่มแผนงาน"):
+                insert_data("pm_schedules", {
+                    "id": pm_id,
+                    "task_name": pm_name,
+                    "next_due_date": str(pm_date),
+                    "status": "Scheduled",
+                    "checklist": pm_check
+                })
+                st.success("เพิ่มแผนงานสำเร็จ!")
+                st.rerun()
