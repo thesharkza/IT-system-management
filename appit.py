@@ -186,22 +186,41 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
     if not df_tickets.empty:
         st.dataframe(df_tickets[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']], use_container_width=True)
         st.divider()
+        
         selected_id = st.selectbox("เลือกรหัสงาน", df_tickets['id'].tolist())
         tk = df_tickets[df_tickets['id'] == selected_id].iloc[0]
-        with st.form("edit_job"):
+        
+        # เริ่ม Form
+        with st.form("edit_job_form"):
             c1, c2 = st.columns(2)
             with c1:
-                st.info(f"**อาการ:** {tk['desc']}")
-                if tk.get('image_path'): st.image(tk['image_path'], width=300)
+                st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
+                
+                # --- จุดที่แก้: ตรวจสอบรูปภาพก่อนแสดงผล เพื่อไม่ให้ Error ---
+                img_path = tk.get('image_path', '')
+                if img_path and str(img_path).startswith('data:image'):
+                    try:
+                        st.image(img_path, caption="รูปภาพประกอบปัญหา", width=400)
+                    except Exception as e:
+                        st.error("ไม่สามารถแสดงรูปภาพได้")
+                elif img_path:
+                    st.warning(f"📎 มีข้อมูลไฟล์แนบเดิม: {img_path} (ไม่สามารถแสดงผลเป็นรูปได้)")
+                # -----------------------------------------------------
+
                 n_status = st.selectbox("สถานะ", ticket_statuses, index=ticket_statuses.index(tk['status']))
-                assignee = st.text_input("ช่าง", value=tk.get('assignee') if pd.notna(tk.get('assignee')) else "")
+                assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') if pd.notna(tk.get('assignee')) else "")
+            
             with c2:
-                root = st.text_area("สาเหตุ", value=tk.get('root_cause') if pd.notna(tk.get('root_cause')) else "")
-                sol = st.text_area("วิธีแก้", value=tk.get('solution') if pd.notna(tk.get('solution')) else "")
-                cost = st.number_input("ค่าใช้จ่าย", value=float(tk.get('cost')) if pd.notna(tk.get('cost')) else 0.0)
-            if st.form_submit_button("บันทึก"):
+                root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') if pd.notna(tk.get('root_cause')) else "")
+                sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') if pd.notna(tk.get('solution')) else "")
+                cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost')) if pd.notna(tk.get('cost')) else 0.0)
+            
+            # --- จุดที่แก้: ย้ายปุ่ม Submit มาไว้ในฟอร์มให้ชัดเจน ---
+            submitted = st.form_submit_button("บันทึกข้อมูลงานซ่อม")
+            
+            if submitted:
                 update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
-                st.success("บันทึกสำเร็จ!")
+                st.success("✅ บันทึกข้อมูลสำเร็จ!")
                 st.rerun()
 
 # ==========================================
