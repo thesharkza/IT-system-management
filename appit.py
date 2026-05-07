@@ -28,7 +28,7 @@ def update_status(table_name, record_id, new_status):
 # ระบบ LOGIN (ซ่อนเมนู Admin)
 # ==========================================
 # กำหนดรหัสผ่านสำหรับ IT Admin ตรงนี้ (เปลี่ยนได้ตามต้องการ)
-ADMIN_PASSWORD = "itpassword123"
+ADMIN_PASSWORD = "adminit123"
 
 # ตรวจสอบสถานะการ Login ในระบบ
 if "is_admin" not in st.session_state:
