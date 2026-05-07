@@ -122,26 +122,38 @@ if page == "📝 แจ้งซ่อม (User)":
                 st.rerun()
 
     with tab2:
-        st.subheader("งานซ่อมที่รอการประเมิน")
+        st.subheader("⭐ ประเมินประสิทธิภาพการให้บริการ")
         df_all = load_table("tickets")
         if not df_all.empty:
-            # กรองเฉพาะงานที่สำเร็จ แต่ยังไม่มีคะแนน
-            ready_to_rate = df_all[(df_all['status'] == 'สำเร็จ') & (df_all['rating'].isna())]
+            ready_to_rate = df_all[(df_all['status'] == 'สำเร็จ') & (df_all['q1'].isna())]
+            
             if not ready_to_rate.empty:
-                selected_job = st.selectbox("เลือกงานซ่อมที่คุณต้องการประเมิน", ready_to_rate['id'].tolist())
-                job_info = ready_to_rate[ready_to_rate['id'] == selected_job].iloc[0]
+                selected_job = st.selectbox("เลือกหมายเลขงานที่ต้องการประเมิน", ready_to_rate['id'].tolist())
                 
-                st.info(f"**ช่างผู้ดูแล:** {job_info.get('assignee', 'ไม่ระบุ')} | **วิธีแก้ไข:** {job_info.get('solution', '-')}")
-                
-                with st.form("csat_form"):
-                    rating = st.select_slider("คะแนนความพึงพอใจ (1-5)", options=[1, 2, 3, 4, 5], value=5)
-                    feedback = st.text_area("ข้อเสนอแนะเพิ่มเติม")
-                    if st.form_submit_button("บันทึกการประเมิน"):
-                        update_csat(selected_job, rating, feedback)
-                        st.success("ขอบคุณสำหรับคำแนะนำครับ!")
+                with st.form("detailed_csat_form"):
+                    st.write("โปรดให้คะแนนความพึงพอใจในหัวข้อต่างๆ ดังนี้:")
+                    
+                    r1 = st.radio("1. คุณพอใจกับการสนับสนุนที่ทีมงานของเรามอบให้มากน้อยเพียงใด?", scale_options, horizontal=True)
+                    r2 = st.radio("2. คุณจะให้คะแนนคุณภาพการบริการด้านฮาร์ดแวร์/ซอฟต์แวร์ของเราอย่างไร?", scale_options, horizontal=True)
+                    r3 = st.radio("3. คุณจะให้คะแนนความมืออาชีพและความเชี่ยวชาญของทีมเราอย่างไร?", scale_options, horizontal=True)
+                    r4 = st.radio("4. คุณจะให้คะแนนการบริการตรงเวลาของทีมของเราอย่างไร?", scale_options, horizontal=True)
+                    r5 = st.radio("5. คุณมีความพึงพอใจในการบริการจากเจ้าหน้าที่ไอทีในครั้งนี้มากน้อยเพียงใด?", scale_options, horizontal=True)
+                    
+                    user_feedback = st.text_area("ข้อเสนอแนะเพิ่มเติมเพื่อการพัฒนา")
+                    
+                    if st.form_submit_button("ส่งผลการประเมิน"):
+                        # แปลงคำภาษาไทยกลับเป็นตัวเลข 1-5
+                        update_csat_full(
+                            selected_job, 
+                            rating_scale[r1], rating_scale[r2], 
+                            rating_scale[r3], rating_scale[r4], 
+                            rating_scale[r5], 
+                            user_feedback
+                        )
+                        st.success("✅ ขอบคุณสำหรับข้อมูลประเมินครับ! เราจะนำไปพัฒนาการบริการให้ดียิ่งขึ้น")
                         st.rerun()
             else:
-                st.write("ไม่มีงานซ่อมที่รอการประเมินในขณะนี้")
+                st.info("💡 ขณะนี้ไม่มีงานซ่อมที่รอการประเมิน")
 
     st.divider()
     st.subheader("📋 สถานะงานซ่อมปัจจุบัน")
@@ -196,18 +208,33 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
 # หน้าที่ 3: สรุปภาพรวม (Dashboard)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
-    st.header("สรุปภาพรวมและประสิทธิภาพการบริการ")
+    st.header("บทสรุปความพึงพอใจ (CSAT Analytics)")
     df_tickets = load_table("tickets")
+    
     if not df_tickets.empty:
-        # สรุป CSAT
-        avg_rating = df_tickets['rating'].mean()
-        total_rated = df_tickets['rating'].count()
+        # คำนวณคะแนนเฉลี่ยแต่ละข้อ
+        avg_q1 = df_tickets['q1'].mean()
+        avg_q2 = df_tickets['q2'].mean()
+        avg_q3 = df_tickets['q3'].mean()
+        avg_q4 = df_tickets['q4'].mean()
+        avg_q5 = df_tickets['q5'].mean()
         
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("งานทั้งหมด", len(df_tickets))
-        c2.metric("สำเร็จแล้ว", len(df_tickets[df_tickets['status'] == 'สำเร็จ']))
-        c3.metric("คะแนนเฉลี่ย CSAT", f"{avg_rating:.2f} / 5" if not pd.isna(avg_rating) else "-")
-        c4.metric("ผู้ประเมิน", f"{total_rated} ท่าน")
+        # แสดงผลในรูปแบบตารางสรุป
+        csat_summary = pd.DataFrame({
+            "หัวข้อการประเมิน": [
+                "1. การสนับสนุนจากทีมงาน",
+                "2. คุณภาพบริการ HW/SW",
+                "3. ความเป็นมืออาชีพ",
+                "4. ความตรงต่อเวลา",
+                "5. ความพึงพอใจภาพรวม"
+            ],
+            "คะแนนเฉลี่ย (เต็ม 5)": [avg_q1, avg_q2, avg_q3, avg_q4, avg_q5]
+        })
+        
+        # แสดง Metric รวม
+        st.metric("คะแนนความพึงพอใจสุทธิ (Net CSAT)", f"{df_tickets['rating'].mean():.2f} / 5")
+        
+        st.table(csat_summary)
         
         st.divider()
         st.subheader("ความคิดเห็นจากผู้ใช้งาน")
