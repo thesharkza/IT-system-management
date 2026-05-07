@@ -204,10 +204,12 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             st.bar_chart(df_tickets['category'].value_counts())
 
 # ==========================================
-# หน้าที่ 4: ทะเบียนอุปกรณ์ (Assets)
+# หน้าที่ 4: ทะเบียนอุปกรณ์ และประวัติการซ่อม (Asset Management)
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
     st.header("ทะเบียนอุปกรณ์ และประวัติการซ่อม")
+    
+    # --- ส่วนที่ 1: ลงทะเบียนอุปกรณ์ใหม่ ---
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
         with st.form("asset_form"):
             a1, a2, a3 = st.columns(3)
@@ -221,35 +223,81 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             with a3:
                 assigned_user = st.text_input("ผู้ใช้งานประจำเครื่อง")
                 warranty_expire = st.date_input("วันหมดการรับประกัน")
+            
             if st.form_submit_button("บันทึกข้อมูลอุปกรณ์"):
                 if asset_id:
                     insert_data("assets", {
-                        "id": asset_id, "type": asset_type, "model": asset_model, "dept": asset_dept, "status": "Active",
-                        "location": asset_location, "assigned_user": assigned_user, "warranty_expire": str(warranty_expire)
+                        "id": asset_id, "type": asset_type, "model": asset_model, 
+                        "dept": asset_dept, "status": "Active",
+                        "location": asset_location, "assigned_user": assigned_user,
+                        "warranty_expire": str(warranty_expire)
                     })
                     st.success("✅ ลงทะเบียนอุปกรณ์สำเร็จ")
                     st.rerun()
 
+    # โหลดข้อมูล
     df_assets = load_table("assets")
+    df_tickets = load_table("tickets")
+
     if not df_assets.empty:
+        # --- ส่วนที่ 2: ตารางรายการทรัพย์สินทั้งหมด ---
         st.subheader("📋 รายการทรัพย์สินทั้งหมด")
         df_display = df_assets[['id', 'type', 'model', 'assigned_user', 'location', 'warranty_expire', 'status']].copy()
-        df_display.rename(columns={'id': 'รหัสอุปกรณ์', 'type': 'ประเภท', 'model': 'รุ่น', 'assigned_user': 'ผู้ใช้งาน', 'location': 'สถานที่ตั้ง', 'warranty_expire': 'วันหมดประกัน'}, inplace=True)
+        df_display.rename(columns={
+            'id': 'รหัสอุปกรณ์', 'type': 'ประเภท', 'model': 'รุ่น/ยี่ห้อ', 
+            'assigned_user': 'ผู้ใช้งาน', 'location': 'สถานที่ตั้ง', 'warranty_expire': 'วันหมดประกัน'
+        }, inplace=True)
         st.dataframe(df_display, use_container_width=True, hide_index=True)
-        
+
+        # --- ส่วนที่ 3: ระบบเจาะลึกประวัติ (Asset Profile) ---
         st.divider()
-        st.subheader("🔍 ตรวจสอบประวัติการซ่อมและต้นทุน")
-        selected_asset = st.selectbox("เลือกรหัสอุปกรณ์เพื่อดูประวัติ", df_assets['id'].tolist())
+        st.subheader("🔍 เจาะลึกประวัติการซ่อมและต้นทุนสะสม")
+        
+        selected_asset = st.selectbox("เลือกรหัสอุปกรณ์เพื่อดูประวัติอย่างละเอียด", df_assets['id'].tolist())
+        
         if selected_asset:
             asset_info = df_assets[df_assets['id'] == selected_asset].iloc[0]
-            df_tickets = load_table("tickets")
+            
+            # กรองข้อมูลงานซ่อมที่ตรงกับรหัสอุปกรณ์นี้
             if not df_tickets.empty and 'asset_id' in df_tickets.columns:
-                df_asset_history = df_tickets[df_tickets['asset_id'] == selected_asset]
-                total_repair_cost = pd.to_numeric(df_asset_history['cost'], errors='coerce').sum()
-                c_info, c_stat1, c_stat2 = st.columns([2, 1, 1])
-                with c_info: st.info(f"**รุ่น:** {asset_info['model']} | **ผู้ใช้:** {asset_info['assigned_user']} | **หมดประกัน:** {asset_info['warranty_expire']}")
-                with c_stat1: st.metric("จำนวนครั้งที่ซ่อม", f"{len(df_asset_history)} ครั้ง")
-                with c_stat2: st.metric("ยอดค่าซ่อมสะสม", f"฿{total_repair_cost:,.2f}")
+                df_history = df_tickets[df_tickets['asset_id'] == selected_asset].copy()
+                
+                # คำนวณตัวเลขสำคัญ
+                total_cost = pd.to_numeric(df_history['cost'], errors='coerce').sum()
+                job_count = len(df_history)
+                success_jobs = len(df_history[df_history['status'] == 'สำเร็จ'])
+                
+                # แสดงผลสรุปแบบ Card
+                c1, c2, c3 = st.columns(3)
+                c1.metric("จำนวนครั้งที่ซ่อม", f"{job_count} ครั้ง")
+                c2.metric("ปิดงานสำเร็จ", f"{success_jobs} งาน")
+                c3.metric("ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}", delta_color="inverse")
+
+                # แสดงตารางประวัติการซ่อมแบบละเอียด
+                st.markdown(f"**ประวัติการซ่อมบำรุงของเครื่อง: {selected_asset}**")
+                if not df_history.empty:
+                    # เลือกคอลัมน์ที่จะแสดงให้ครบตามสเปคช่าง
+                    history_display = df_history[['date', 'id', 'user', 'assignee', 'root_cause', 'solution', 'cost', 'status']].copy()
+                    
+                    # เรียงลำดับเอาวันที่ล่าสุดขึ้นก่อน
+                    history_display = history_display.sort_values(by='date', ascending=False)
+                    
+                    history_display.rename(columns={
+                        'date': 'วันที่แจ้ง',
+                        'id': 'เลขที่ใบสั่งซ่อม',
+                        'user': 'ผู้แจ้งซ่อม',
+                        'assignee': 'ช่างผู้รับผิดชอบ',
+                        'root_cause': 'สาเหตุของปัญหา',
+                        'solution': 'วิธีแก้ไข',
+                        'cost': 'ค่าใช้จ่าย (บาท)',
+                        'status': 'สถานะ'
+                    }, inplace=True)
+                    
+                    st.dataframe(history_display, use_container_width=True, hide_index=True)
+                else:
+                    st.success("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม (สภาพใหม่/ยังไม่เคยเสีย)")
+            else:
+                st.info("ยังไม่มีข้อมูลงานแจ้งซ่อมผูกกับรหัสอุปกรณ์นี้")
 
 # ==========================================
 # หน้าที่ 5: แผนบำรุงรักษา (PM) - แบบมี Check List
