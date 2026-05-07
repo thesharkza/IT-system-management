@@ -106,17 +106,25 @@ if page == "📝 แจ้งปัญหา (User)":
     
     df_tickets = load_table("tickets")
     if not df_tickets.empty:
-        # เลือกข้อมูลมาแสดง (ซ่อนรายละเอียดเชิงลึกเพื่อความสะอาดตา)
-        df_user_view = df_tickets[['id', 'date', 'user', 'dept', 'category', 'status']].copy()
+        # 1. การซ่อนคอลัมน์: ทำได้โดยเลือกเฉพาะคอลัมน์ที่อยากให้แสดงไว้ในวงเล็บนี้
+        # สมมติว่าอยากซ่อนแผนก (dept) ก็แค่ลบ 'dept' ออกจากวงเล็บด้านล่างนี้ครับ
+        df_user_view = df_tickets[['id', 'date', 'user', 'category', 'status']].copy()
         
-        # กำหนดความสำคัญในการเรียงลำดับ (Pending ขึ้นก่อน -> In Progress -> Resolved)
+        # จัดเรียงลำดับ (Pending ขึ้นก่อน)
         sort_mapping = {'Pending': 1, 'In Progress': 2, 'Resolved': 3}
         df_user_view['sort_order'] = df_user_view['status'].map(sort_mapping)
-        
-        # เรียงข้อมูลตามสถานะ และวันที่แจ้งล่าสุด
         df_user_view = df_user_view.sort_values(by=['sort_order', 'date'], ascending=[True, False]).drop('sort_order', axis=1)
         
-        # ฟังก์ชันกำหนดสีตามสถานะงาน
+        # 2. การเปลี่ยนชื่อหัวข้อ: ใช้คำสั่ง rename และจับคู่ชื่อเดิมกับชื่อใหม่
+        df_user_view.rename(columns={
+            'id': 'รหัสงาน',
+            'date': 'เวลาที่แจ้ง',
+            'user': 'ผู้แจ้งปัญหา',
+            'category': 'หมวดหมู่',
+            'status': 'สถานะงาน'
+        }, inplace=True)
+        
+        # ฟังก์ชันกำหนดสีตามสถานะงาน (ค่าของข้อมูลยังเป็นภาษาอังกฤษอยู่)
         def color_status(val):
             if val == 'Pending':
                 return 'background-color: #ffebee; color: #c62828; font-weight: bold' # สีแดงอ่อน
@@ -126,11 +134,11 @@ if page == "📝 แจ้งปัญหา (User)":
                 return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold' # สีเขียว
             return ''
             
-        # สร้างตารางพร้อมลงสีด้วยฟังก์ชัน .applymap (หรือ .map สำหรับ pandas เวอร์ชันใหม่)
+        # สร้างตารางพร้อมลงสี (อ้างอิงชื่อคอลัมน์ที่เปลี่ยนใหม่เป็น 'สถานะงาน')
         try:
-            styled_df = df_user_view.style.applymap(color_status, subset=['status'])
+            styled_df = df_user_view.style.applymap(color_status, subset=['สถานะงาน'])
         except AttributeError:
-            styled_df = df_user_view.style.map(color_status, subset=['status'])
+            styled_df = df_user_view.style.map(color_status, subset=['สถานะงาน'])
             
         # แสดงผลตาราง (ซ่อน Index ด้านหน้า)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
