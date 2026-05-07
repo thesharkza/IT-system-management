@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 from supabase import create_client, Client
 from streamlit_calendar import calendar
+from dateutil.relativedelta import relativedelta
 
 # --- CUSTOM UI STYLING ---
 st.markdown("""
@@ -567,36 +568,58 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             else:
                 st.success("🎉 ทุกแผนงานในระบบดำเนินการเสร็จสิ้นแล้ว!")
 
-    # --- Tab 3: ลงทะเบียนแผนใหม่ (ตรงตามรูปแบบเดิมที่ต้องการ) ---
-    with tab_add:
-        st.subheader("➕ เพิ่มแผนบำรุงรักษาใหม่")
-        with st.form("new_pm_plan_detailed"):
-            # ส่วนหัวข้อหลัก
-            pm_name = st.text_input("ชื่องาน (Task Name)*")
+    # --- Tab 3: ลงทะเบียนแผนใหม่ (พร้อมระบบคำนวณวันล่วงหน้าอัตโนมัติ) ---
+with tab_add:
+    st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
+    with st.form("new_pm_automation_form"):
+        pm_name = st.text_input("ชื่องาน (Task Name)*")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            start_date = st.date_input("เริ่มตั้งแต่วันที่")
+            pm_freq = st.selectbox("ความถี่ (Frequency)", 
+                                 ["ครั้งเดียว (One-time)", "รายวัน (Daily)", "รายสัปดาห์ (Weekly)", "รายเดือน (Monthly)", "รายปี (Yearly)"])
+        with c2:
+            pm_assignee = st.text_input("ช่างผู้รับผิดชอบ")
+            # เลือกจำนวนครั้งที่ต้องการสร้างล่วงหน้า (เช่น ทำรายเดือน 12 ครั้ง = 1 ปี)
+            occurence = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, max_value=50, value=12 if "Monthly" in pm_freq else 1)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                pm_date = st.date_input("กำหนดวันทำครั้งแรก (Start Date)")
-                pm_freq = st.selectbox("ความถี่ (Frequency)", ["รายวัน (Daily)", "รายสัปดาห์ (Weekly)", "รายเดือน (Monthly)", "รายปี (Yearly)"])
-            with col2:
-                pm_assignee = st.text_input("ช่างผู้รับผิดชอบ (Assignee)")
+        pm_check = st.text_area("รายการ Checklist")
+        
+        if st.form_submit_button("บันทึกและจัดตารางลงปฏิทิน"):
+            if pm_name and pm_check:
+                current_due_date = start_date
+                base_id = f"PM-{datetime.now().strftime('%m%S')}"
                 
-            # ส่วน Checklist
-            pm_check = st.text_area("รายการ Checklist (ตรวจสอบอะไรบ้าง?)", placeholder="1. เช็คพัดลมระบายอากาศ\n2. ทำความสะอาดฝุ่น\n3. เช็คแรงดันไฟ")
-            
-            if st.form_submit_button("บันทึกแผนงาน"):
-                if pm_name and pm_check:
-                    new_id = f"PM-{datetime.now().strftime('%m%S')}"
+                # วนลูปเพื่อสร้างข้อมูลตามจำนวนครั้ง (Occurences)
+                for i in range(occurence):
+                    # สร้าง ID เฉพาะสำหรับแต่ละครั้ง
+                    task_id = f"{base_id}-{i+1}"
+                    
                     insert_data("pm_schedules", {
-                        "id": new_id,
-                        "task_name": pm_name,
-                        "next_due_date": str(pm_date),
+                        "id": task_id,
+                        "task_name": f"{pm_name} (ครั้งที่ {i+1})",
+                        "next_due_date": str(current_due_date),
                         "frequency": pm_freq,
                         "assignee": pm_assignee,
                         "checklist": pm_check,
                         "status": "Scheduled"
                     })
-                    st.toast("เพิ่มแผน PM เรียบร้อย!", icon="✅")
-                    st.rerun()
-                else:
-                    st.error("กรุณากรอกข้อมูล ชื่องาน และ Checklist ให้ครบถ้วน")
+                    
+                    # --- คำนวณวันถัดไปตามความถี่ ---
+                    if pm_freq == "รายวัน (Daily)":
+                        current_due_date += relativedelta(days=1)
+                    elif pm_freq == "รายสัปดาห์ (Weekly)":
+                        current_due_date += relativedelta(weeks=1)
+                    elif pm_freq == "รายเดือน (Monthly)":
+                        current_due_date += relativedelta(months=1)
+                    elif pm_freq == "รายปี (Yearly)":
+                        current_due_date += relativedelta(years=1)
+                    else: # Once-time
+                        break
+                
+                st.toast(f"สร้างแผนงาน {occurence} ครั้ง ลงปฏิทินเรียบร้อยแล้ว!", icon="📅")
+                st.success(f"ระบบได้จัดตารางงาน '{pm_name}' ล่วงหน้าให้คุณเรียบร้อย")
+                st.rerun()
+            else:
+                st.error("กรุณาระบุข้อมูลให้ครบถ้วน")
