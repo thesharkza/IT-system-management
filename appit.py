@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import base64
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -97,12 +98,19 @@ if page == "📝 แจ้งซ่อม (User)":
             df_existing = load_table("tickets")
             ticket_id = f"JOB-{len(df_existing) + 1:04d}"
             date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-            file_name = uploaded_file.name if uploaded_file else ""
+            
+            # แปลงไฟล์รูปภาพเป็น Base64 เพื่อเก็บลง Database (ถ้ามีการแนบไฟล์)
+            if uploaded_file is not None:
+                img_bytes = uploaded_file.getvalue()
+                encoded_img = base64.b64encode(img_bytes).decode('utf-8')
+                image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+            else:
+                image_data = ""
             
             insert_data("tickets", {
                 "id": ticket_id, "date": date_str, "user": user_name, 
                 "dept": department, "category": category, "desc": description, 
-                "status": "รอตรวจสอบ", "urgency": urgency, "image_path": file_name,
+                "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data,
                 "asset_id": asset_id_input 
             })
             st.success(f"✅ บันทึกสำเร็จ! หมายเลขงาน: {ticket_id}")
@@ -151,6 +159,18 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
             c1, c2 = st.columns(2)
             with c1:
                 st.info(f"**อาการที่แจ้ง:** {ticket_data['desc']}")
+                
+                # --- ส่วนแสดงรูปภาพ ---
+                img_data = ticket_data.get('image_path', '')
+                if img_data and str(img_data).startswith('data:image'):
+                    st.image(img_data, caption="รูปภาพประกอบปัญหา", use_container_width=True)
+                elif img_data:
+                    # กรณีเป็นไฟล์ที่แจ้งซ่อมมาก่อนหน้านี้ (เวอร์ชันเก่าที่บันทึกแค่ชื่อไฟล์)
+                    st.caption(f"📎 มีไฟล์แนบ (เวอร์ชันเก่า): {img_data}")
+                else:
+                    st.caption("ไม่มีรูปภาพแนบ")
+                # ----------------------
+                
                 new_status = st.selectbox("อัปเดตสถานะ", ticket_statuses, index=ticket_statuses.index(ticket_data['status']))
                 assignee = st.text_input("ช่างผู้รับผิดชอบ", value=ticket_data.get('assignee', '') if pd.notna(ticket_data.get('assignee')) else '')
             with c2:
@@ -236,8 +256,6 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.header("ระบบแผนงาน Preventive Maintenance (PM)")
-    
-    # โหลดข้อมูลอุปกรณ์มาเพื่อทำ Dropdown ให้เลือกผูก PM กับอุปกรณ์
     df_assets = load_table("assets")
     asset_options = ["ไม่ระบุ"] + df_assets['id'].tolist() if not df_assets.empty else ["ไม่ระบุ"]
 
@@ -245,17 +263,13 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
         with st.form("pm_form"):
             p1, p2 = st.columns(2)
             with p1:
-                pm_name = st.text_input("หัวข้องาน (เช่น ตรวจเช็ค Server ห้อง Data Center)")
+                pm_name = st.text_input("หัวข้องาน")
                 asset_id = st.selectbox("ผูกกับอุปกรณ์ (ถ้ามี)", asset_options)
                 assignee = st.text_input("ช่างผู้รับผิดชอบ")
             with p2:
                 pm_freq = st.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายไตรมาส", "รายปี"])
                 pm_date = st.date_input("วันที่กำหนดทำ (Due Date)")
-            
-            # ช่องสำหรับใส่ Check List โดยให้พนักงานพิมพ์ข้อๆ ไว้
-            checklist = st.text_area("📝 สร้าง Check List การตรวจสอบ (ขึ้นบรรทัดใหม่สำหรับแต่ละข้อ)", 
-                                     placeholder="- ตรวจสอบและเป่าฝุ่นพัดลมระบายอากาศ\n- เช็คอุณหภูมิ CPU\n- สำรองข้อมูลลง External Drive")
-            
+            checklist = st.text_area("📝 สร้าง Check List การตรวจสอบ (ขึ้นบรรทัดใหม่สำหรับแต่ละข้อ)", placeholder="- ตรวจสอบพัดลม\n- เช็คอุณหภูมิ")
             if st.form_submit_button("บันทึกแผน PM"):
                 if pm_name:
                     df_pm = load_table("pm_schedules")
@@ -272,40 +286,24 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
     df_pm = load_table("pm_schedules")
     if not df_pm.empty:
         st.subheader("📅 ปฏิทิน/ตารางงาน PM")
-        # เรียงลำดับตามวันที่กำหนดทำ (ให้งานที่ใกล้ถึงกำหนดขึ้นก่อน)
         df_pm_sorted = df_pm.sort_values(by="next_due_date")
         df_display = df_pm_sorted[['id', 'next_due_date', 'task_name', 'asset_id', 'assignee', 'frequency', 'status']].copy()
-        df_display.rename(columns={
-            'id': 'รหัส PM', 'next_due_date': 'กำหนดทำ', 'task_name': 'ชื่องาน',
-            'asset_id': 'รหัสอุปกรณ์', 'assignee': 'ผู้รับผิดชอบ', 'frequency': 'ความถี่', 'status': 'สถานะ'
-        }, inplace=True)
-        
+        df_display.rename(columns={'id': 'รหัส PM', 'next_due_date': 'กำหนดทำ', 'task_name': 'ชื่องาน', 'asset_id': 'รหัสอุปกรณ์', 'assignee': 'ผู้รับผิดชอบ', 'frequency': 'ความถี่', 'status': 'สถานะ'}, inplace=True)
         st.dataframe(df_display, use_container_width=True, hide_index=True)
         
         st.divider()
         st.subheader("✔️ บันทึกผลการทำ PM")
-        
-        # กรองเฉพาะงานที่ยังไม่เสร็จ (Scheduled หรือ Overdue) มาให้เลือกบันทึกผล
         pending_pms = df_pm[df_pm['status'] != 'Completed']['id'].tolist()
-        
         if pending_pms:
             pm_update_id = st.selectbox("เลือกงาน PM ที่ดำเนินการแล้ว", pending_pms)
-            
-            # ดึงข้อมูลของงาน PM ที่เลือกมาโชว์ Check List ให้ช่างดู
             pm_data = df_pm[df_pm['id'] == pm_update_id].iloc[0]
-            
             c_info, c_check = st.columns(2)
-            with c_info:
-                st.info(f"**ชื่องาน:** {pm_data['task_name']}\n\n**อุปกรณ์:** {pm_data.get('asset_id', '-')}\n\n**ช่าง:** {pm_data.get('assignee', '-')}")
-            with c_check:
-                # แสดง Check list ออกมาให้ช่างดูเพื่อปฏิบัติงานตาม
-                st.warning(f"**รายการ Check List ที่ต้องทำ:**\n\n{pm_data.get('checklist', 'ไม่มี Check List')}")
+            with c_info: st.info(f"**ชื่องาน:** {pm_data['task_name']}\n\n**อุปกรณ์:** {pm_data.get('asset_id', '-')}\n\n**ช่าง:** {pm_data.get('assignee', '-')}")
+            with c_check: st.warning(f"**รายการ Check List ที่ต้องทำ:**\n\n{pm_data.get('checklist', 'ไม่มี Check List')}")
             
             with st.form("pm_result_form"):
                 pm_new_st = st.selectbox("อัปเดตสถานะงาน", ["Scheduled", "Completed", "Overdue"], index=1)
-                pm_result = st.text_area("บันทึกผลการตรวจสอบ (สภาพอุปกรณ์, ข้อเสนอแนะ)", 
-                                         value=pm_data.get('pm_result', '') if pd.notna(pm_data.get('pm_result')) else '')
-                
+                pm_result = st.text_area("บันทึกผลการตรวจสอบ", value=pm_data.get('pm_result', '') if pd.notna(pm_data.get('pm_result')) else '')
                 if st.form_submit_button("บันทึกผลการทำ PM"):
                     update_pm_full(pm_update_id, pm_new_st, pm_result)
                     st.success("บันทึกผล PM และปิดจ๊อบเรียบร้อย!")
