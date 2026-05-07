@@ -4,6 +4,55 @@ import base64
 from datetime import datetime
 from supabase import create_client, Client
 
+# --- CUSTOM UI STYLING ---
+st.markdown("""
+    <style>
+    /* ปรับแต่งฟอนต์ภาษาไทยให้ดูทันสมัย */
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Prompt', sans-serif;
+    }
+
+    /* ตกแต่ง Sidebar ให้ดูโปรเฟสชันนอล */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e0e0e0;
+    }
+
+    /* ปรับแต่ง Card (Metric) ให้มีเงาและขอบโค้ง */
+    div[data-testid="metric-container"] {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* ปรับแต่งปุ่มกด (Buttons) */
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+        background-color: #0046ad;
+        color: white;
+        border: none;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #002d70;
+        border: none;
+        color: white;
+    }
+
+    /* ปรับแต่งตาราง (Dataframe) */
+    .stDataFrame {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.set_page_config(page_title="Enterprise CMMS & CSAT", layout="wide", initial_sidebar_state="expanded")
 
 # --- DATABASE SETUP ---
