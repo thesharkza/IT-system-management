@@ -465,7 +465,7 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
     with tab_add:
         st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
         with st.form("pm_auto_form"):
-            name = st.text_input("ชื่องาน PM (เช่น ตรวจเช็ค Server)*")
+            name = st.text_input("ชื่องาน PM (เช่น CCTV)*")
             c1, c2 = st.columns(2)
             with c1:
                 s_date = st.date_input("เริ่มตั้งแต่วันที่")
@@ -474,17 +474,18 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 assign = st.text_input("ช่างผู้รับผิดชอบ")
                 count = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, value=12)
             
-            check = st.text_area("รายการ Checklist (ระบุสิ่งที่ต้องตรวจเช็ค)")
+            check = st.text_area("รายการ Checklist")
             
             if st.form_submit_button("📅 บันทึกและจัดตารางลงปฏิทิน"):
                 if name and assign and check:
                     curr_date = s_date
-                    # สร้าง Batch ID จากเวลาปัจจุบันเพื่อความไม่ซ้ำกัน
-                    batch_id = datetime.now().strftime('%H%M%S') 
+                    # 1. ดึงปีปัจจุบันมาเตรียมไว้
+                    current_year = datetime.now().year
                     
                     for i in range(count):
-                        # สร้าง Unique ID ที่ไม่ซ้ำแน่นอนในรอบนั้น
-                        unique_id = f"PM-{batch_id}-{i+1}"
+                        # 2. สร้าง ID ตามรูปแบบที่ต้องการ: PM-(task_name)(ลำดับ/ทั้งหมด)(year)
+                        # ตัวอย่างผลลัพธ์: PM-CCTV(1/12)2026
+                        unique_id = f"PM-{name}({i+1}/{count}){current_year}"
                         
                         insert_data("pm_schedules", {
                             "id": unique_id, 
@@ -496,13 +497,13 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                             "frequency": freq
                         })
                         
-                        # คำนวณวันถัดไปโดยใช้ relativedelta
+                        # คำนวณวันที่ถัดไป
                         if freq == "รายวัน": curr_date += relativedelta(days=1)
                         elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                         elif freq == "รายเดือน": curr_date += relativedelta(months=1)
                         elif freq == "รายปี": curr_date += relativedelta(years=1)
                     
-                    st.success(f"✅ สร้างแผนงานจำนวน {count} รายการ สำเร็จ!")
+                    st.success(f"✅ สร้างแผนงานเรียบร้อย! (รหัสเริ่มต้น: PM-{name}(1/{count}){current_year})")
                     st.rerun()
                 else:
                     st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วนก่อนบันทึก")
