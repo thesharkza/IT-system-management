@@ -219,6 +219,8 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
                 c1, c2 = st.columns(2)
                 with c1:
                     st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
+                    st.info(f"**ประเภทอุปกรณ์:** {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
+                    st.info(f"**ประเภทงาน:** {tk['category']}")
                     img_path = tk.get('image_path', '')
                     if img_path and str(img_path).startswith('data:image'):
                         try: st.image(img_path, caption="รูปประกอบ", width=400)
