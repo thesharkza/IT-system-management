@@ -9,56 +9,61 @@ from dateutil.relativedelta import relativedelta
 # --- CUSTOM UI STYLING ---
 st.markdown("""
     <style>
-    /* 1. ปรับแต่งฟอนต์พื้นฐาน */
+    /* 1. ฟอนต์พื้นฐาน */
     @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
     html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
 
-    /* 2. ปรับแต่ง Sidebar Menu: ซ่อนปุ่มวงกลม และขยายขนาด */
-    /* ซ่อนวงกลมหน้า Radio */
-    div[data-testid="stSidebar"] .st-bo {
+    /* 2. จัดการเมนู Sidebar */
+    /* ซ่อนปุ่มวงกลม (Radio Circle) ทุกรูปแบบ */
+    div[data-testid="stSidebar"] .st-bo, 
+    div[data-testid="stSidebar"] .st-b4,
+    div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] + div {
+        display: none !important;
+    }
+    
+    /* ซ่อนเฉพาะวงกลมใน Radio Group */
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-testid="stWidgetLabel"] + div div:first-child {
         display: none !important;
     }
 
-    /* ปรับแต่งแถบเมนูให้เป็นปุ่มยาว */
-    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-        padding: 12px 20px !important;
-        border-radius: 10px !important;
+    /* ปรับแต่ง Label ให้เป็นปุ่มกดขนาดใหญ่ */
+    div[data-testid="stSidebar"] div[role="radiogroup"] label {
+        padding: 15px 20px !important;
+        border-radius: 12px !important;
         margin-bottom: 8px !important;
-        transition: all 0.2s ease-in-out !important;
-        background-color: transparent !important;
+        transition: all 0.2s ease !important;
         border: 1px solid transparent !important;
-        cursor: pointer !important;
+        width: 100% !important;
     }
 
-    /* ขยายขนาดตัวหนังสือและไอคอนในเมนู */
-    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
-        font-size: 20px !important; /* ปรับขนาดตัวหนังสือตรงนี้ */
+    /* ขยายขนาดตัวหนังสือและไอคอน */
+    div[data-testid="stSidebar"] div[role="radiogroup"] label p {
+        font-size: 22px !important; /* ขนาดตัวหนังสือใหญ่ขึ้น */
         font-weight: 500 !important;
-        color: #31333F !important;
         margin: 0 !important;
+        color: #31333F !important;
     }
 
-    /* สีตอนเอาเมาส์ไปวาง (Hover) */
-    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-        background-color: rgba(0, 70, 173, 0.05) !important;
-    }
-
-    /* สไตล์เมื่อเมนูถูกเลือก (Selected) */
-    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [data-checked="true"] {
+    /* เมื่อเมนูถูกเลือก (Selected) */
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
         background-color: #0046ad !important; /* สีน้ำเงิน Isuzu */
-        border-radius: 10px !important;
+        box-shadow: 0 4px 10px rgba(0, 70, 173, 0.25) !important;
     }
 
-    /* เปลี่ยนสีตัวหนังสือเป็นขาวเมื่อถูกเลือก */
-    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [data-checked="true"] p {
+    /* สีตัวหนังสือขาวเมื่อเลือก */
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p {
         color: white !important;
     }
 
-    /* ตกแต่งส่วนอื่นๆ */
+    /* เอฟเฟกต์ Hover (เมื่อเอาเมาส์วาง) */
+    div[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background-color: rgba(0, 70, 173, 0.1) !important;
+    }
+
+    /* ตกแต่งส่วนอื่นๆ คงเดิม */
     [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #0046ad; color: white; border: none; }
-    .stDataFrame { border-radius: 10px; overflow: hidden; }
     </style>
     """, unsafe_allow_html=True)
 
