@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 # --- CUSTOM UI STYLING ---
 st.markdown("""
     <style>
-    /* 1. ปรับแต่งฟอนต์และพื้นฐาน */
+    /* 1. ปรับแต่งฟอนต์พื้นฐาน */
     @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
     html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
 
@@ -19,33 +19,34 @@ st.markdown("""
         display: none !important;
     }
 
-    /* ปรับแต่งพื้นที่การกดให้เป็นแถบยาวและสวยงาม */
+    /* ปรับแต่งแถบเมนูให้เป็นปุ่มยาว */
     div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
         padding: 12px 20px !important;
-        border-radius: 12px !important;
-        margin-bottom: 6px !important;
-        transition: all 0.3s ease-in-out !important;
+        border-radius: 10px !important;
+        margin-bottom: 8px !important;
+        transition: all 0.2s ease-in-out !important;
         background-color: transparent !important;
         border: 1px solid transparent !important;
+        cursor: pointer !important;
     }
 
     /* ขยายขนาดตัวหนังสือและไอคอนในเมนู */
     div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
-        font-size: 19px !important; /* เพิ่มขนาดตัวหนังสือ */
+        font-size: 20px !important; /* ปรับขนาดตัวหนังสือตรงนี้ */
         font-weight: 500 !important;
-        color: #333 !important;
+        color: #31333F !important;
+        margin: 0 !important;
     }
 
-    /* เอฟเฟกต์ตอนเอาเมาส์ไปวาง (Hover) */
+    /* สีตอนเอาเมาส์ไปวาง (Hover) */
     div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-        background-color: rgba(0, 70, 173, 0.08) !important;
-        border: 1px solid rgba(0, 70, 173, 0.2) !important;
+        background-color: rgba(0, 70, 173, 0.05) !important;
     }
 
     /* สไตล์เมื่อเมนูถูกเลือก (Selected) */
     div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [data-checked="true"] {
         background-color: #0046ad !important; /* สีน้ำเงิน Isuzu */
-        box-shadow: 0 4px 12px rgba(0, 70, 173, 0.2) !important;
+        border-radius: 10px !important;
     }
 
     /* เปลี่ยนสีตัวหนังสือเป็นขาวเมื่อถูกเลือก */
@@ -53,16 +54,11 @@ st.markdown("""
         color: white !important;
     }
 
-    /* ซ่อนหัวข้อ "ไปที่หน้า" (Optional: ถ้าอยากให้ดูคลีนขึ้น) */
-    div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
-        padding-bottom: 15px !important;
-        font-size: 16px !important;
-        color: #666;
-    }
-    
-    /* ส่วนอื่นๆ คงเดิม... */
+    /* ตกแต่งส่วนอื่นๆ */
+    [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; }
-    .stButton>button { width: 100%; border-radius: 5px; background-color: #0046ad; color: white; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #0046ad; color: white; border: none; }
+    .stDataFrame { border-radius: 10px; overflow: hidden; }
     </style>
     """, unsafe_allow_html=True)
 
