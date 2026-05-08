@@ -400,66 +400,84 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) สมบูรณ์
+# หน้าที่ 5: แผนบำรุงรักษา (PM) - เวอร์ชั่นเสถียร
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
+    
+    # โหลดข้อมูล PM ล่าสุด
     df_pm = load_table("pm_schedules")
 
     with tab_cal:
         if not df_pm.empty:
-            events = [{"title": f"🛠️ {r['task_name']}", "start": r['next_due_date'], "color": "#2e7d32" if r['status']=="Completed" else "#0046ad"} for _, r in df_pm.iterrows()]
+            events = [
+                {
+                    "title": f"🛠️ {r['task_name']}", 
+                    "start": str(r['next_due_date']), 
+                    "color": "#2e7d32" if r['status'] == "Completed" else "#0046ad"
+                } for _, r in df_pm.iterrows()
+            ]
             calendar(events=events, options={"headerToolbar": {"center": "title"}, "initialView": "dayGridMonth"}, key="pm_calendar")
-        else: st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
+        else:
+            st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
 
     with tab_list:
         if not df_pm.empty:
+            # แสดงเฉพาะงานที่ต้องทำ
             st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
             pending = df_pm[df_pm['status'] != 'Completed']
             if not pending.empty:
+                st.subheader("📝 บันทึกผลการตรวจเช็ค")
                 sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
-                with st.form("pm_finish"):
-                    res = st.text_area("บันทึกผลการตรวจสอบ")
+                with st.form("pm_finish_form"):
+                    res = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
                     if st.form_submit_button("✅ บันทึกและปิดงาน PM"):
-                        update_pm_full(sel, "Completed", res); st.rerun()
+                        update_pm_full(sel, "Completed", res)
+                        st.success(f"บันทึกผลงาน {sel} เรียบร้อยแล้ว")
+                        st.rerun()
 
     with tab_add:
-        st.subheader("➕ เพิ่มแผนบำรุงรักษาอัตโนมัติ")
-        with st.form("pm_auto"):
-            name = st.text_input("ชื่องาน PM*")
+        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
+        with st.form("pm_auto_form"):
+            name = st.text_input("ชื่องาน PM (เช่น ตรวจเช็ค Server)*")
             c1, c2 = st.columns(2)
             with c1:
-                s_date = st.date_input("เริ่มวันที่")
+                s_date = st.date_input("เริ่มตั้งแต่วันที่")
                 freq = st.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายปี"])
             with c2:
-                assign = st.text_input("ผู้รับผิดชอบ")
-                count = st.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
-            check = st.text_area("Checklist")
+                assign = st.text_input("ช่างผู้รับผิดชอบ")
+                count = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, value=12)
             
-            if st.form_submit_button("บันทึกและจัดตาราง"):
+            check = st.text_area("รายการ Checklist (ระบุสิ่งที่ต้องตรวจเช็ค)")
+            
+            if st.form_submit_button("📅 บันทึกและจัดตารางลงปฏิทิน"):
                 if name and assign and check:
                     curr_date = s_date
-                    # ใช้ Microseconds (%f) เพื่อความปลอดภัยสูงสุด
-                    batch_timestamp = datetime.now().strftime('%H%M%S%f')[:12]
+                    # สร้าง Batch ID จากเวลาปัจจุบันเพื่อความไม่ซ้ำกัน
+                    batch_id = datetime.now().strftime('%H%M%S') 
                     
                     for i in range(count):
-                        unique_id = f"PM-{batch_timestamp}-{i+1}"
+                        # สร้าง Unique ID ที่ไม่ซ้ำแน่นอนในรอบนั้น
+                        unique_id = f"PM-{batch_id}-{i+1}"
+                        
                         insert_data("pm_schedules", {
                             "id": unique_id, 
-                            "task_name": f"{name} ({i+1})", 
+                            "task_name": f"{name} ({i+1}/{count})", 
                             "next_due_date": str(curr_date), 
                             "status": "Scheduled", 
                             "assignee": assign, 
                             "checklist": check, 
                             "frequency": freq
                         })
+                        
+                        # คำนวณวันถัดไปโดยใช้ relativedelta
                         if freq == "รายวัน": curr_date += relativedelta(days=1)
                         elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                         elif freq == "รายเดือน": curr_date += relativedelta(months=1)
                         elif freq == "รายปี": curr_date += relativedelta(years=1)
-                    st.success(f"จัดตาราง PM จำนวน {count} รายการ เรียบร้อยแล้ว!")
+                    
+                    st.success(f"✅ สร้างแผนงานจำนวน {count} รายการ สำเร็จ!")
                     st.rerun()
                 else:
-                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วน")
-                    st.error("❌ กรุณากรอกข้อมูล ชื่องาน, ผู้รับผิดชอบ และ Checklist ให้ครบถ้วน")
+                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วนก่อนบันทึก")
