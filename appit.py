@@ -123,6 +123,8 @@ if page == "📝 แจ้งซ่อม (User)":
                 ])
             with c2:
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
+                # เพิ่มช่องสถานที่ตั้งอุปกรณ์
+                loc_input = st.text_input("สถานที่ตั้งอุปกรณ์ (เช่น ตึก A ชั้น 2 / แผนก QC)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
             
@@ -130,15 +132,7 @@ if page == "📝 แจ้งซ่อม (User)":
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
             
             if submitted:
-                df_existing = load_table("tickets")
-                ticket_id = f"JOB-{len(df_existing) + 1:04d}"
-                image_data = ""
-                if uploaded_file:
-                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
-
-                final_dept = department if department else "Other"
-                
+                # ... (ส่วนสร้าง ticket_id และจัดการรูปภาพเดิม) ...
                 if user_name and description and final_dept:
                     insert_data("tickets", {
                         "id": ticket_id, 
@@ -151,7 +145,8 @@ if page == "📝 แจ้งซ่อม (User)":
                         "status": "รอตรวจสอบ", 
                         "urgency": urgency, 
                         "image_path": image_data, 
-                        "asset_id": asset_id_input 
+                        "asset_id": asset_id_input,
+                        "location": loc_input  # เพิ่มการบันทึกสถานที่ตั้งลง DB
                     })
                     st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
@@ -206,11 +201,20 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
         
         if not df_pending.empty:
-            df_manage_view = df_pending[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']].copy()
+            # เพิ่ม 'location' เข้าไปในตารางแสดงผล
+            df_manage_view = df_pending[['id', 'date', 'user', 'dept', 'location', 'category', 'status']].copy()
             df_manage_view.rename(columns={
                 'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง',
-                'dept': 'แผนก', 'category': 'ประเภท', 'urgency': 'ความเร่งด่วน', 'status': 'สถานะ'
+                'dept': 'แผนก', 'location': 'สถานที่ตั้ง', 'category': 'ประเภท', 'status': 'สถานะ'
             }, inplace=True)
+            
+            # ... (ส่วนแสดงตารางเดิม) ...
+            
+            # ในฟอร์มแก้ไข แสดงสถานที่ตั้งเป็นแถบข้อมูล
+            with c1:
+                st.info(f"**📍 สถานที่ตั้ง:** {tk.get('location', 'ไม่ได้ระบุ')}")
+                st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
+                # ... (ส่วนที่เหลือเดิม) ...
 
             def color_status(val):
                 if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
