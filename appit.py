@@ -6,9 +6,6 @@ from supabase import create_client, Client
 from streamlit_calendar import calendar
 from dateutil.relativedelta import relativedelta
 
-ม CSS เพื่อบังคับให้ข้อความในตารางอยู่ตรงกลางเสมอครับ:
-
-Python
 # --- CUSTOM UI STYLING ---
 st.markdown("""
     <style>
