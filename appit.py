@@ -86,7 +86,7 @@ menu_options = ["📝 แจ้งซ่อม (User)", "💻 จัดการ
 page = st.sidebar.radio("ไปที่หน้า", menu_options)
 
 # ==========================================
-# หน้าที่ 1: แจ้งซ่อม (User)
+# หน้าที่ 1: แจ้งซ่อม (User) - เพิ่มช่องประเภทอุปกรณ์
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
     st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
@@ -98,12 +98,18 @@ if page == "📝 แจ้งซ่อม (User)":
             with c1:
                 user_name = st.text_input("ชื่อผู้แจ้ง")
                 department = st.selectbox("แผนก", depts) 
-                category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
-                category = st.selectbox("ประเภทอุปกรณ์", ["Computer PC", "Notebook", "TEC Printer", "Laser Printer", "IPDS Printer", "TV", "CCTV", "IPad", "Other"])
+                # 1. ช่องประเภทงานเดิม
+                category = st.selectbox("ประเภทงานซ่อม (Category)", ["Hardware", "Software", "Network", "Other"])
+                # 2. เพิ่มช่องประเภทอุปกรณ์ใหม่ที่คุณต้องการ
+                eq_type = st.selectbox("ประเภทอุปกรณ์ (Equipment Type)", [
+                    "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
+                    "IPDS Printer", "TV", "CCTV", "IPad", "Other"
+                ])
             with c2:
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
+            
             description = st.text_area("รายละเอียดปัญหา")
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
             
@@ -115,14 +121,25 @@ if page == "📝 แจ้งซ่อม (User)":
                     if uploaded_file:
                         encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
                         image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+                    
+                    # บันทึกข้อมูลโดยเพิ่ม equipment_type เข้าไปด้วย
                     insert_data("tickets", {
-                        "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
-                        "dept": department, "category": category, "desc": description, 
-                        "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data, "asset_id": asset_id_input 
+                        "id": ticket_id, 
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                        "user": user_name, 
+                        "dept": department, 
+                        "category": category, 
+                        "equipment_type": eq_type, # <--- เพิ่มฟิลด์นี้
+                        "desc": description, 
+                        "status": "รอตรวจสอบ", 
+                        "urgency": urgency, 
+                        "image_path": image_data, 
+                        "asset_id": asset_id_input 
                     })
                     st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
-                else: st.error("❌ กรุณาระบุชื่อผู้แจ้งและรายละเอียดปัญหา")
+                else: 
+                    st.error("❌ กรุณาระบุชื่อผู้แจ้งและรายละเอียดปัญหา")
 
         st.divider()
         st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
