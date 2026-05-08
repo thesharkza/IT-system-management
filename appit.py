@@ -99,6 +99,7 @@ if page == "📝 แจ้งซ่อม (User)":
                 user_name = st.text_input("ชื่อผู้แจ้ง")
                 department = st.selectbox("แผนก", depts) 
                 category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
+                category = st.selectbox("ประเภทอุปกรณ์", ["Computer PC", "Notebook", "TEC Printer", "Laser Printer", "IPDS Printer", "TV", "CCTV", "IPad", "Other"])
             with c2:
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
