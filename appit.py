@@ -137,26 +137,27 @@ if page == "📝 แจ้งซ่อม (User)":
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
             
             if submitted:
-                # ตรวจสอบว่าถ้าเลือก Other ต้องกรอกชื่อแผนกด้วย
+                # สร้าง ticket_id
+                df_existing = load_table("tickets")
+                ticket_id = f"JOB-{len(df_existing) + 1:04d}"
+                
+                # จัดการรูปภาพ
+                image_data = ""
+                if uploaded_file:
+                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+
                 final_dept = department if department else "Other"
                 
                 if user_name and description and final_dept:
-                    # ... (Logic การ insert_data เหมือนเดิม แต่ใช้ final_dept) ...
-                    insert_data("tickets", {
-                        "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
-                        "dept": final_dept, "category": category, "equipment_type": eq_type,
-                        "desc": description, "status": "รอตรวจสอบ", "urgency": urgency, 
-                        "image_path": image_data, "asset_id": asset_id_input 
-                    })
-                    
-                    # บันทึกข้อมูลโดยเพิ่ม equipment_type เข้าไปด้วย
+                    # บันทึกเพียงครั้งเดียว
                     insert_data("tickets", {
                         "id": ticket_id, 
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
                         "user": user_name, 
-                        "dept": department, 
+                        "dept": final_dept, 
                         "category": category, 
-                        "equipment_type": eq_type, # <--- เพิ่มฟิลด์นี้
+                        "equipment_type": eq_type,
                         "desc": description, 
                         "status": "รอตรวจสอบ", 
                         "urgency": urgency, 
@@ -435,16 +436,15 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 assign = st.text_input("ผู้รับผิดชอบ")
                 count = st.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
             check = st.text_area("Checklist")
+            
             if st.form_submit_button("บันทึกและจัดตาราง"):
-                if name and assign and check: # ตรวจสอบค่าว่างก่อนบันทึก
+                if name and assign and check:
                     curr_date = s_date
-                    # สร้าง Timestamp หลักครั้งเดียวด้านนอกลูป
-                    batch_timestamp = datetime.now().strftime('%H%M%S') 
+                    # ใช้ Microseconds (%f) เพื่อความปลอดภัยสูงสุด
+                    batch_timestamp = datetime.now().strftime('%H%M%S%f')[:12]
                     
                     for i in range(count):
-                        # เพิ่ม i เข้าไปท้าย ID เพื่อให้ Unique แน่นอน
                         unique_id = f"PM-{batch_timestamp}-{i+1}"
-                        
                         insert_data("pm_schedules", {
                             "id": unique_id, 
                             "task_name": f"{name} ({i+1})", 
@@ -454,14 +454,12 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                             "checklist": check, 
                             "frequency": freq
                         })
-                        
-                        # คำนวณวันถัดไป (ต้องการ python-dateutil ใน requirements.txt)
                         if freq == "รายวัน": curr_date += relativedelta(days=1)
                         elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                         elif freq == "รายเดือน": curr_date += relativedelta(months=1)
                         elif freq == "รายปี": curr_date += relativedelta(years=1)
-                    
                     st.success(f"จัดตาราง PM จำนวน {count} รายการ เรียบร้อยแล้ว!")
                     st.rerun()
                 else:
+                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วน")
                     st.error("❌ กรุณากรอกข้อมูล ชื่องาน, ผู้รับผิดชอบ และ Checklist ให้ครบถ้วน")
