@@ -124,7 +124,7 @@ if page == "📝 แจ้งซ่อม (User)":
             with c2:
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
                 # เพิ่มช่องสถานที่ตั้งอุปกรณ์
-                loc_input = st.text_input("สถานที่ตั้งอุปกรณ์ (เช่น ตึก A ชั้น 2 / แผนก QC)") 
+                loc_input = st.text_input("สถานที่ตั้งอุปกรณ์ (เช่น KD2 / เสา 4B / Mini office QC)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
             
