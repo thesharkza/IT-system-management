@@ -237,9 +237,8 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
 
 คุณสามารถนำโค้ดส่วนนี้ไปวางทับในหน้า 📊 Dashboard ในไฟล์ appit.py ได้เลยครับ:
 
-Python
 # ==========================================
-# หน้าที่ 3: Dashboard (ปรับปรุงการแสดงผล CSAT และ Feedback)
+# หน้าที่ 3: Dashboard (อัปเดตการแสดงผล CSAT และ Feedback)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
@@ -274,7 +273,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
-        # --- ส่วนที่ปรับปรุง: รายละเอียดคะแนน CSAT เป็น % ---
+        # --- ส่วนรายละเอียดคะแนน CSAT เป็น % ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
             # ฟังก์ชันแปลงคะแนนเฉลี่ยเป็นเปอร์เซ็นต์ (คะแนนเต็ม 5)
             def to_percent(val):
@@ -298,7 +297,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             })
             st.table(csat_stats)
 
-        # --- ส่วนที่ปรับปรุง: ข้อเสนอแนะล่าสุด (โชว์เฉพาะที่มีข้อความ) ---
+        # --- ส่วนข้อเสนอแนะล่าสุด (โชว์เฉพาะที่มีข้อความ) ---
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
             # กรองเฉพาะแถวที่มีข้อความ (ไม่เป็นค่าว่าง และ ไม่เป็น None)
@@ -313,6 +312,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                 st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
     else:
         st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในระบบ")
+        
 # ==========================================
 # หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - ปรับปรุงให้ซ่อนตารางทั้งหมด)
 # ==========================================
