@@ -436,11 +436,32 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 count = st.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
             check = st.text_area("Checklist")
             if st.form_submit_button("บันทึกและจัดตาราง"):
-                curr_date = s_date
-                for i in range(count):
-                    insert_data("pm_schedules", {"id": f"PM-{datetime.now().strftime('%H%M%S%f')[:10]}", "task_name": f"{name} ({i+1})", "next_due_date": str(curr_date), "status": "Scheduled", "assignee": assign, "checklist": check, "frequency": freq})
-                    if freq == "รายวัน": curr_date += relativedelta(days=1)
-                    elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
-                    elif freq == "รายเดือน": curr_date += relativedelta(months=1)
-                    elif freq == "รายปี": curr_date += relativedelta(years=1)
-                st.success("จัดตาราง PM เรียบร้อยแล้ว!"); st.rerun()
+                if name and assign and check: # ตรวจสอบค่าว่างก่อนบันทึก
+                    curr_date = s_date
+                    # สร้าง Timestamp หลักครั้งเดียวด้านนอกลูป
+                    batch_timestamp = datetime.now().strftime('%H%M%S') 
+                    
+                    for i in range(count):
+                        # เพิ่ม i เข้าไปท้าย ID เพื่อให้ Unique แน่นอน
+                        unique_id = f"PM-{batch_timestamp}-{i+1}"
+                        
+                        insert_data("pm_schedules", {
+                            "id": unique_id, 
+                            "task_name": f"{name} ({i+1})", 
+                            "next_due_date": str(curr_date), 
+                            "status": "Scheduled", 
+                            "assignee": assign, 
+                            "checklist": check, 
+                            "frequency": freq
+                        })
+                        
+                        # คำนวณวันถัดไป (ต้องการ python-dateutil ใน requirements.txt)
+                        if freq == "รายวัน": curr_date += relativedelta(days=1)
+                        elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
+                        elif freq == "รายเดือน": curr_date += relativedelta(months=1)
+                        elif freq == "รายปี": curr_date += relativedelta(years=1)
+                    
+                    st.success(f"จัดตาราง PM จำนวน {count} รายการ เรียบร้อยแล้ว!")
+                    st.rerun()
+                else:
+                    st.error("❌ กรุณากรอกข้อมูล ชื่องาน, ผู้รับผิดชอบ และ Checklist ให้ครบถ้วน")
