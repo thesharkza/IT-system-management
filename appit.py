@@ -319,14 +319,44 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
+        # --- ส่วนที่ปรับปรุง: จัดตำแหน่งข้อความในตาราง CSAT ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
             def to_percent(val):
                 return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
+            
             csat_stats = pd.DataFrame({
-                "หัวข้อการประเมิน": ["1. การสนับสนุนจากทีมงาน", "2. คุณภาพการบริการ HW/SW", "3. ความเป็นมืออาชีพ", "4. ความตรงต่อเวลา", "5. ความพึงพอใจในภาพรวม"],
-                "คะแนนความพึงพอใจ (%)": [to_percent(df_filtered['q1'].mean()), to_percent(df_filtered['q2'].mean()), to_percent(df_filtered['q3'].mean()), to_percent(df_filtered['q4'].mean()), to_percent(df_filtered['q5'].mean())]
+                "หัวข้อการประเมิน": [
+                    "1. การสนับสนุนจากทีมงาน", 
+                    "2. คุณภาพการบริการ HW/SW", 
+                    "3. ความเป็นมืออาชีพ", 
+                    "4. ความตรงต่อเวลา", 
+                    "5. ความพึงพอใจในภาพรวม"
+                ],
+                "คะแนนความพึงพอใจ (%)": [
+                    to_percent(df_filtered['q1'].mean()), 
+                    to_percent(df_filtered['q2'].mean()), 
+                    to_percent(df_filtered['q3'].mean()), 
+                    to_percent(df_filtered['q4'].mean()), 
+                    to_percent(df_filtered['q5'].mean())
+                ]
             })
-            st.table(csat_stats)
+            
+            # แปลงข้อมูลเป็น HTML และเขียน CSS ควบคุมเฉพาะตารางนี้
+            csat_html = csat_stats.to_html(index=False, classes='csat-table', border=0)
+            st.markdown(f"""
+            <style>
+            .csat-table {{ width: 100%; border-collapse: collapse; font-size: 16px; margin-bottom: 1rem; }}
+            .csat-table th {{ background-color: #f8f9fa; padding: 12px; border-bottom: 2px solid #e0e0e0; color: #31333F; }}
+            .csat-table td {{ padding: 12px; border-bottom: 1px solid #f0f2f6; }}
+            
+            /* บังคับคอลัมน์ 1 (หัวข้อ) ชิดซ้ายเสมอ */
+            .csat-table th:nth-child(1), .csat-table td:nth-child(1) {{ text-align: left !important; }}
+            
+            /* บังคับคอลัมน์ 2 (คะแนน %) ไว้กึ่งกลางเสมอ */
+            .csat-table th:nth-child(2), .csat-table td:nth-child(2) {{ text-align: center !important; }}
+            </style>
+            {csat_html}
+            """, unsafe_allow_html=True)
 
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
