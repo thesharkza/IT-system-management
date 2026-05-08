@@ -295,7 +295,6 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         m4.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
         
         st.divider()
-        
         c1, c2 = st.columns(2)
         with c1: 
             st.subheader("🏢 ปริมาณงานตามแผนก")
@@ -306,32 +305,18 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
-        # --- ส่วนคะแนน CSAT เป็นเปอร์เซ็นต์ และจัดวางตรงกลาง ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
             def to_percent(val):
                 return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
-
             csat_stats = pd.DataFrame({
-                "หัวข้อการประเมิน": [
-                    "1. การสนับสนุนจากทีมงาน", "2. คุณภาพการบริการ HW/SW", 
-                    "3. ความเป็นมืออาชีพ", "4. ความตรงต่อเวลา", "5. ความพึงพอใจในภาพรวม"
-                ],
-                "คะแนนความพึงพอใจ (%)": [
-                    to_percent(df_filtered['q1'].mean()), to_percent(df_filtered['q2'].mean()), 
-                    to_percent(df_filtered['q3'].mean()), to_percent(df_filtered['q4'].mean()), 
-                    to_percent(df_filtered['q5'].mean())
-                ]
+                "หัวข้อการประเมิน": ["1. การสนับสนุนจากทีมงาน", "2. คุณภาพการบริการ HW/SW", "3. ความเป็นมืออาชีพ", "4. ความตรงต่อเวลา", "5. ความพึงพอใจในภาพรวม"],
+                "คะแนนความพึงพอใจ (%)": [to_percent(df_filtered['q1'].mean()), to_percent(df_filtered['q2'].mean()), to_percent(df_filtered['q3'].mean()), to_percent(df_filtered['q4'].mean()), to_percent(df_filtered['q5'].mean())]
             })
-            # ใช้คำสั่งนี้เพื่อให้ข้อความในตารางอยู่ตรงกลาง
-            st.table(csat_stats.style.set_properties(**{'text-align': 'center'}))
+            st.table(csat_stats)
 
-        # --- ส่วนข้อเสนอแนะล่าสุด (แสดงเฉพาะที่มีการพิมพ์ข้อความมา) ---
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
-            feedback_list = df_filtered[
-                (df_filtered['feedback'].notna()) & (df_filtered['feedback'].str.strip() != "")
-            ][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
-            
+            feedback_list = df_filtered[(df_filtered['feedback'].notna()) & (df_filtered['feedback'].str.strip() != "")][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
             if not feedback_list.empty:
                 feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
                 st.dataframe(feedback_list, use_container_width=True, hide_index=True)
