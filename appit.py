@@ -343,6 +343,8 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             
             # แปลงข้อมูลเป็น HTML และเขียน CSS ควบคุมเฉพาะตารางนี้
             csat_html = csat_stats.to_html(index=False, classes='csat-table', border=0)
+            
+            # แสดงผลผ่าน HTML (คำเตือน: ต้องลบ st.table(csat_stats) ของเก่าออกเพื่อไม่ให้ตารางซ้ำซ้อน)
             st.markdown(f"""
             <style>
             .csat-table {{ width: 100%; border-collapse: collapse; font-size: 16px; margin-bottom: 1rem; }}
@@ -355,6 +357,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             /* บังคับคอลัมน์ 2 (คะแนน %) ไว้กึ่งกลางเสมอ */
             .csat-table th:nth-child(2), .csat-table td:nth-child(2) {{ text-align: center !important; }}
             </style>
+            
             {csat_html}
             """, unsafe_allow_html=True)
 
