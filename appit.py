@@ -161,36 +161,71 @@ if page == "📝 แจ้งซ่อม (User)":
             else: st.info("ไม่มีงานซ่อมที่รอการประเมิน")
 
 # ==========================================
-# หน้าที่ 2: จัดการงานซ่อม (ช่าง)
+# หน้าที่ 2: จัดการงานซ่อม (ช่าง) - ปรับปรุงให้โชว์เฉพาะงานไม่เสร็จ
 # ==========================================
 elif page == "💻 จัดการงานซ่อม (ช่าง)" and st.session_state.is_admin:
-    st.header("💻 รายการงานซ่อมและอัปเดตสถานะ")
+    st.header("💻 จัดการงานซ่อม (เฉพาะงานที่รอดำเนินการ)")
     df_tickets = load_table("tickets")
+    
     if not df_tickets.empty:
-        df_manage_view = df_tickets[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']].copy()
-        df_manage_view.rename(columns={'id':'รหัสงาน','date':'วันที่แจ้ง','user':'ผู้แจ้ง','dept':'แผนก','category':'ประเภท','urgency':'ความเร่งด่วน','status':'สถานะ'}, inplace=True)
-        st.dataframe(df_manage_view, use_container_width=True, hide_index=True)
-        st.divider()
-        selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_tickets['id'].tolist())
-        tk = df_tickets[df_tickets['id'] == selected_id].iloc[0]
-        with st.form("edit_job_form"):
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
-                img_path = tk.get('image_path', '')
-                if img_path and str(img_path).startswith('data:image'):
-                    try: st.image(img_path, caption="รูปประกอบ", width=400)
-                    except: st.error("แสดงรูปไม่ได้")
-                n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
-                assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
-            with c2:
-                root = st.text_area("สาเหตุ", value=tk.get('root_cause') or "")
-                sol = st.text_area("วิธีแก้", value=tk.get('solution') or "")
-                cost = st.number_input("ค่าใช้จ่าย", value=float(tk.get('cost') or 0.0))
-            if st.form_submit_button("บันทึกข้อมูล"):
-                update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
-                st.success("บันทึกสำเร็จ!")
-                st.rerun()
+        # --- จุดสำคัญ: กรองเฉพาะงานที่ยังไม่สำเร็จ ---
+        df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
+        
+        if not df_pending.empty:
+            # 1. เตรียมตารางสำหรับแสดงผลเฉพาะงานที่ยังไม่เสร็จ
+            df_manage_view = df_pending[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']].copy()
+            
+            # เรียงลำดับงานตามความเร่งด่วน/วันที่
+            df_manage_view.rename(columns={
+                'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง',
+                'dept': 'แผนก', 'category': 'ประเภท', 'urgency': 'ความเร่งด่วน', 'status': 'สถานะ'
+            }, inplace=True)
+
+            # ฟังก์ชันลงสีสถานะ (คงเดิมตาม UX ที่ตั้งไว้)
+            def color_status(val):
+                if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
+                elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17; font-weight: bold'
+                elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a; font-weight: bold'
+                return ''
+
+            st.dataframe(df_manage_view.style.map(color_status, subset=['สถานะ']), use_container_width=True, hide_index=True)
+            
+            st.divider()
+            
+            # 2. ส่วนฟอร์มแก้ไข (ตัวเลือกใน selectbox จะมีเฉพาะงานที่ยังไม่เสร็จ)
+            st.subheader("🔧 อัปเดตรายละเอียดและปิดงาน")
+            selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
+            tk = df_pending[df_pending['id'] == selected_id].iloc[0]
+            
+            with st.form("edit_job_form"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
+                    img_path = tk.get('image_path', '')
+                    if img_path and str(img_path).startswith('data:image'):
+                        try: st.image(img_path, caption="รูปประกอบ", width=400)
+                        except: st.error("ไม่สามารถแสดงรูปภาพได้")
+                    
+                    n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
+                    assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
+                
+                with c2:
+                    root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') or "")
+                    sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') or "")
+                    cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost') or 0.0))
+                
+                submitted = st.form_submit_button("บันทึกข้อมูลงานซ่อม")
+                if submitted:
+                    update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
+                    st.toast(f"บันทึกงาน {selected_id} สำเร็จ!", icon="✅")
+                    st.success("อัปเดตสถานะเรียบร้อยแล้ว")
+                    st.rerun()
+        else:
+            # กรณีไม่มีงานค้างเลย
+            st.balloons()
+            st.success("🎉 ยอดเยี่ยม! ขณะนี้ไม่มีงานซ่อมค้างในระบบ")
+    else:
+        st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
 # ==========================================
 # หน้าที่ 3: Dashboard
