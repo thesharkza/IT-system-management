@@ -341,6 +341,9 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                 ]
             })
             
+            # เปลี่ยนจาก st.table เป็น st.dataframe เพื่อให้เป็นตารางกริดที่สวยงามและซ่อน Index
+            st.dataframe(csat_stats, use_container_width=True, hide_index=True)
+            
             # แปลงข้อมูลเป็น HTML และเขียน CSS ควบคุมเฉพาะตารางนี้
             csat_html = csat_stats.to_html(index=False, classes='csat-table', border=0)
             st.markdown(f"""
