@@ -6,6 +6,35 @@ from supabase import create_client, Client
 from streamlit_calendar import calendar
 from dateutil.relativedelta import relativedelta
 
+ม CSS เพื่อบังคับให้ข้อความในตารางอยู่ตรงกลางเสมอครับ:
+
+Python
+# --- CUSTOM UI STYLING ---
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
+    html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
+
+    /* จัดตารางให้อยู่ตรงกลางเสมอ */
+    .stTable td, .stTable th {
+        text-align: center !important;
+    }
+    
+    /* ส่วน Sidebar Menu (ที่แก้ไขไปก่อนหน้า) */
+    div[data-testid="stSidebar"] .st-bo { display: none !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] label {
+        padding: 15px 20px !important;
+        border-radius: 12px !important;
+        margin-bottom: 8px !important;
+        transition: all 0.2s ease !important;
+        width: 100% !important;
+    }
+    div[data-testid="stSidebar"] div[role="radiogroup"] label p { font-size: 20px !important; font-weight: 500 !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] { background-color: #0046ad !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p { color: white !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.set_page_config(page_title="Enterprise CMMS & CSAT", layout="wide", initial_sidebar_state="expanded")
 
 # --- DATABASE SETUP ---
