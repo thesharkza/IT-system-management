@@ -132,7 +132,19 @@ if page == "📝 แจ้งซ่อม (User)":
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
             
             if submitted:
-                # ... (ส่วนสร้าง ticket_id และจัดการรูปภาพเดิม) ...
+                df_existing = load_table("tickets")
+                ticket_id = f"JOB-{len(df_existing) + 1:04d}"
+                
+                # จัดการรูปภาพ
+                image_data = ""
+                if uploaded_file:
+                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+
+                # 👇 บรรทัดนี้สำคัญมาก! ต้องมีเพื่อสร้างตัวแปร final_dept ก่อนนำไปเช็คเงื่อนไขด้านล่าง
+                final_dept = department if department else "Other"
+                
+                # เมื่อมี final_dept ด้านบนแล้ว บรรทัดนี้ถึงจะทำงานได้โดยไม่ Error ครับ
                 if user_name and description and final_dept:
                     insert_data("tickets", {
                         "id": ticket_id, 
@@ -145,13 +157,12 @@ if page == "📝 แจ้งซ่อม (User)":
                         "status": "รอตรวจสอบ", 
                         "urgency": urgency, 
                         "image_path": image_data, 
-                        "asset_id": asset_id_input,
-                        "location": loc_input  # เพิ่มการบันทึกสถานที่ตั้งลง DB
+                        "asset_id": asset_id_input 
                     })
                     st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
                 else: 
-                    st.error("❌ กรุณาระบุชื่อผู้แจ้งและรายละเอียดปัญหา")
+                    st.error("❌ กรุณาระบุชื่อผู้แจ้ง, แผนก และรายละเอียดปัญหา")
 
         st.divider()
         st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
