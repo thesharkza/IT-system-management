@@ -9,13 +9,60 @@ from dateutil.relativedelta import relativedelta
 # --- CUSTOM UI STYLING ---
 st.markdown("""
     <style>
+    /* 1. ปรับแต่งฟอนต์และพื้นฐาน */
     @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
     html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
-    [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
-    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #0046ad; color: white; border: none; transition: 0.3s; }
-    .stButton>button:hover { background-color: #002d70; border: none; color: white; }
-    .stDataFrame { border-radius: 10px; overflow: hidden; }
+
+    /* 2. ปรับแต่ง Sidebar Menu: ซ่อนปุ่มวงกลม และขยายขนาด */
+    /* ซ่อนวงกลมหน้า Radio */
+    div[data-testid="stSidebar"] .st-bo {
+        display: none !important;
+    }
+
+    /* ปรับแต่งพื้นที่การกดให้เป็นแถบยาวและสวยงาม */
+    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+        padding: 12px 20px !important;
+        border-radius: 12px !important;
+        margin-bottom: 6px !important;
+        transition: all 0.3s ease-in-out !important;
+        background-color: transparent !important;
+        border: 1px solid transparent !important;
+    }
+
+    /* ขยายขนาดตัวหนังสือและไอคอนในเมนู */
+    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
+        font-size: 19px !important; /* เพิ่มขนาดตัวหนังสือ */
+        font-weight: 500 !important;
+        color: #333 !important;
+    }
+
+    /* เอฟเฟกต์ตอนเอาเมาส์ไปวาง (Hover) */
+    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
+        background-color: rgba(0, 70, 173, 0.08) !important;
+        border: 1px solid rgba(0, 70, 173, 0.2) !important;
+    }
+
+    /* สไตล์เมื่อเมนูถูกเลือก (Selected) */
+    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [data-checked="true"] {
+        background-color: #0046ad !important; /* สีน้ำเงิน Isuzu */
+        box-shadow: 0 4px 12px rgba(0, 70, 173, 0.2) !important;
+    }
+
+    /* เปลี่ยนสีตัวหนังสือเป็นขาวเมื่อถูกเลือก */
+    div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [data-checked="true"] p {
+        color: white !important;
+    }
+
+    /* ซ่อนหัวข้อ "ไปที่หน้า" (Optional: ถ้าอยากให้ดูคลีนขึ้น) */
+    div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+        padding-bottom: 15px !important;
+        font-size: 16px !important;
+        color: #666;
+    }
+    
+    /* ส่วนอื่นๆ คงเดิม... */
+    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; }
+    .stButton>button { width: 100%; border-radius: 5px; background-color: #0046ad; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
