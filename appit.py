@@ -201,21 +201,17 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
         
         if not df_pending.empty:
-            # เพิ่ม 'location' เข้าไปในตารางแสดงผล
-            df_manage_view = df_pending[['id', 'date', 'user', 'dept', 'location', 'category', 'status']].copy()
-            df_manage_view.rename(columns={
-                'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง',
-                'dept': 'แผนก', 'location': 'สถานที่ตั้ง', 'category': 'ประเภท', 'status': 'สถานะ'
-            }, inplace=True)
+            # 1. จัดการตารางแสดงผล (เช็คให้ชัวร์ว่ามีคอลัมน์ location ก่อน เพื่อป้องกันแอปพัง)
+            view_cols = ['id', 'date', 'user', 'dept', 'category', 'status']
+            rename_dict = {'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง', 'dept': 'แผนก', 'category': 'ประเภท', 'status': 'สถานะ'}
             
-            # ... (ส่วนแสดงตารางเดิม) ...
+            # ถ้ามีคอลัมน์ location ในตาราง ให้แสดงผลด้วย
+            if 'location' in df_pending.columns:
+                view_cols.insert(4, 'location')
+                rename_dict['location'] = 'สถานที่ตั้ง'
             
-            # ในฟอร์มแก้ไข แสดงสถานที่ตั้งเป็นแถบข้อมูล
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**📍 สถานที่ตั้ง:** {tk.get('location', 'ไม่ได้ระบุ')}")
-                st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
-                # ... (ส่วนที่เหลือเดิม) ...
+            df_manage_view = df_pending[view_cols].copy()
+            df_manage_view.rename(columns=rename_dict, inplace=True)
 
             def color_status(val):
                 if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
@@ -227,16 +223,23 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
             
             st.divider()
             
+            # 2. ส่วนเลือกงานที่ต้องการแก้ไข
             st.subheader("🔧 อัปเดตรายละเอียดและปิดงาน")
             selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
+            
+            # ประกาศตัวแปร tk หลังจากเลือกรหัสงานแล้ว (แก้ปัญหา name 'tk' is not defined)
             tk = df_pending[df_pending['id'] == selected_id].iloc[0]
             
+            # 3. ฟอร์มสำหรับอัปเดตงานซ่อม
             with st.form("edit_job_form"):
                 c1, c2 = st.columns(2)
+                
                 with c1:
-                    st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
+                    st.info(f"**📍 สถานที่ตั้ง:** {tk.get('location', 'ไม่ได้ระบุ')}")
+                    st.info(f"**อาการที่แจ้ง:** {tk.get('desc', '')}")
                     st.info(f"**ประเภทอุปกรณ์:** {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
-                    st.info(f"**ประเภทงาน:** {tk['category']}")
+                    st.info(f"**ประเภทงาน:** {tk.get('category', '')}")
+                    
                     img_path = tk.get('image_path', '')
                     if img_path and str(img_path).startswith('data:image'):
                         try: st.image(img_path, caption="รูปประกอบ", width=400)
