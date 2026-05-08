@@ -6,67 +6,6 @@ from supabase import create_client, Client
 from streamlit_calendar import calendar
 from dateutil.relativedelta import relativedelta
 
-# --- CUSTOM UI STYLING ---
-st.markdown("""
-    <style>
-    /* 1. ฟอนต์พื้นฐาน */
-    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
-    html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
-
-    /* 2. จัดการเมนู Sidebar */
-    /* ซ่อนปุ่มวงกลม (Radio Circle) ทุกรูปแบบ */
-    div[data-testid="stSidebar"] .st-bo, 
-    div[data-testid="stSidebar"] .st-b4,
-    div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] + div {
-        display: none !important;
-    }
-    
-    /* ซ่อนเฉพาะวงกลมใน Radio Group */
-    div[data-testid="stSidebar"] div[role="radiogroup"] [data-testid="stWidgetLabel"] + div div:first-child {
-        display: none !important;
-    }
-
-    /* ปรับแต่ง Label ให้เป็นปุ่มกดขนาดใหญ่ */
-    div[data-testid="stSidebar"] div[role="radiogroup"] label {
-        padding: 15px 20px !important;
-        border-radius: 12px !important;
-        margin-bottom: 8px !important;
-        transition: all 0.2s ease !important;
-        border: 1px solid transparent !important;
-        width: 100% !important;
-    }
-
-    /* ขยายขนาดตัวหนังสือและไอคอน */
-    div[data-testid="stSidebar"] div[role="radiogroup"] label p {
-        font-size: 22px !important; /* ขนาดตัวหนังสือใหญ่ขึ้น */
-        font-weight: 500 !important;
-        margin: 0 !important;
-        color: #31333F !important;
-    }
-
-    /* เมื่อเมนูถูกเลือก (Selected) */
-    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
-        background-color: #0046ad !important; /* สีน้ำเงิน Isuzu */
-        box-shadow: 0 4px 10px rgba(0, 70, 173, 0.25) !important;
-    }
-
-    /* สีตัวหนังสือขาวเมื่อเลือก */
-    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p {
-        color: white !important;
-    }
-
-    /* เอฟเฟกต์ Hover (เมื่อเอาเมาส์วาง) */
-    div[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
-        background-color: rgba(0, 70, 173, 0.1) !important;
-    }
-
-    /* ตกแต่งส่วนอื่นๆ คงเดิม */
-    [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
-    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #0046ad; color: white; border: none; }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.set_page_config(page_title="Enterprise CMMS & CSAT", layout="wide", initial_sidebar_state="expanded")
 
 # --- DATABASE SETUP ---
