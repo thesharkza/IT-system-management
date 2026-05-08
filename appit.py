@@ -233,8 +233,13 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
     else:
         st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
+ได้เลยครับ ผมได้ปรับปรุงโค้ดในส่วนของ 📊 Dashboard ให้แสดงคะแนนเป็นเปอร์เซ็นต์ (%) โดยคำนวณจากคะแนนเต็ม 5 และปรับส่วนของข้อเสนอแนะให้กรองเฉพาะรายการที่มีการพิมพ์ข้อความเข้ามาเท่านั้นครับ
+
+คุณสามารถนำโค้ดส่วนนี้ไปวางทับในหน้า 📊 Dashboard ในไฟล์ appit.py ได้เลยครับ:
+
+Python
 # ==========================================
-# หน้าที่ 3: Dashboard (กู้คืนส่วนแสดงผลความพึงพอใจ)
+# หน้าที่ 3: Dashboard (ปรับปรุงการแสดงผล CSAT และ Feedback)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
@@ -251,7 +256,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("งานแจ้งซ่อม", len(df_filtered))
         resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
-        m2.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{(resolved/len(df_filtered)*100):.1f}%" if len(df_filtered)>0 else "0%")
+        m2.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{(resolved/len(df_filtered)*100):.1f}%" if len(df_filtered) > 0 else "0%")
         m3.metric("คะแนนเฉลี่ย", f"{df_filtered['rating'].mean():.2f} ⭐" if not df_filtered['rating'].isna().all() else "0.00 ⭐")
         pending = len(df_filtered[df_filtered['status'] == 'รอตรวจสอบ'])
         m4.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
@@ -269,8 +274,12 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
-        # --- ส่วนที่นำกลับมา: รายละเอียดคะแนน CSAT 5 หัวข้อ ---
+        # --- ส่วนที่ปรับปรุง: รายละเอียดคะแนน CSAT เป็น % ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
+            # ฟังก์ชันแปลงคะแนนเฉลี่ยเป็นเปอร์เซ็นต์ (คะแนนเต็ม 5)
+            def to_percent(val):
+                return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
+
             csat_stats = pd.DataFrame({
                 "หัวข้อการประเมิน": [
                     "1. การสนับสนุนจากทีมงาน", 
@@ -279,17 +288,24 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                     "4. ความตรงต่อเวลา", 
                     "5. ความพึงพอใจในภาพรวม"
                 ],
-                "คะแนนเฉลี่ย": [
-                    df_filtered['q1'].mean(), df_filtered['q2'].mean(), 
-                    df_filtered['q3'].mean(), df_filtered['q4'].mean(), df_filtered['q5'].mean()
+                "คะแนนความพึงพอใจ (%)": [
+                    to_percent(df_filtered['q1'].mean()), 
+                    to_percent(df_filtered['q2'].mean()), 
+                    to_percent(df_filtered['q3'].mean()), 
+                    to_percent(df_filtered['q4'].mean()), 
+                    to_percent(df_filtered['q5'].mean())
                 ]
             })
             st.table(csat_stats)
 
-        # --- ส่วนที่นำกลับมา: ข้อเสนอแนะล่าสุด ---
+        # --- ส่วนที่ปรับปรุง: ข้อเสนอแนะล่าสุด (โชว์เฉพาะที่มีข้อความ) ---
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
-            feedback_list = df_filtered[df_filtered['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+            # กรองเฉพาะแถวที่มีข้อความ (ไม่เป็นค่าว่าง และ ไม่เป็น None)
+            feedback_list = df_filtered[
+                (df_filtered['feedback'].notna()) & (df_filtered['feedback'] != "")
+            ][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+            
             if not feedback_list.empty:
                 feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
                 st.dataframe(feedback_list, use_container_width=True, hide_index=True)
