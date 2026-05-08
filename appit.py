@@ -234,17 +234,20 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard
+# หน้าที่ 3: Dashboard (กู้คืนส่วนแสดงผลความพึงพอใจ)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
     df = load_table("tickets")
+    
     if not df.empty:
+        # ระบบคัดกรองรายเดือน
         df['date_dt'] = pd.to_datetime(df['date'])
         df['month_year'] = df['date_dt'].dt.strftime('%m-%Y')
         selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", ["ทั้งหมด"] + sorted(df['month_year'].unique(), reverse=True))
         df_filtered = df[df['month_year'] == selected_month] if selected_month != "ทั้งหมด" else df
         
+        # สรุปตัวเลขสำคัญ (Metrics)
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("งานแจ้งซ่อม", len(df_filtered))
         resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
@@ -254,10 +257,46 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         m4.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
         
         st.divider()
+        
+        # กราฟสถิติ
         c1, c2 = st.columns(2)
-        with c1: st.subheader("🏢 ปริมาณงานตามแผนก"); st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
-        with c2: st.subheader("🛠️ ประเภทปัญหาที่พบ"); st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
+        with c1: 
+            st.subheader("🏢 ปริมาณงานตามแผนก")
+            st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
+        with c2: 
+            st.subheader("🛠️ ประเภทปัญหาที่พบ")
+            st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
 
+        st.divider()
+
+        # --- ส่วนที่นำกลับมา: รายละเอียดคะแนน CSAT 5 หัวข้อ ---
+        with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
+            csat_stats = pd.DataFrame({
+                "หัวข้อการประเมิน": [
+                    "1. การสนับสนุนจากทีมงาน", 
+                    "2. คุณภาพการบริการ HW/SW", 
+                    "3. ความเป็นมืออาชีพ", 
+                    "4. ความตรงต่อเวลา", 
+                    "5. ความพึงพอใจในภาพรวม"
+                ],
+                "คะแนนเฉลี่ย": [
+                    df_filtered['q1'].mean(), df_filtered['q2'].mean(), 
+                    df_filtered['q3'].mean(), df_filtered['q4'].mean(), df_filtered['q5'].mean()
+                ]
+            })
+            st.table(csat_stats)
+
+        # --- ส่วนที่นำกลับมา: ข้อเสนอแนะล่าสุด ---
+        st.subheader("💬 ข้อเสนอแนะล่าสุด")
+        if 'feedback' in df_filtered.columns:
+            feedback_list = df_filtered[df_filtered['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+            if not feedback_list.empty:
+                feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
+                st.dataframe(feedback_list, use_container_width=True, hide_index=True)
+            else:
+                st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
+    else:
+        st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในระบบ")
 # ==========================================
 # หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - ปรับปรุงให้ซ่อนตารางทั้งหมด)
 # ==========================================
