@@ -234,20 +234,18 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard (อัปเดตการแสดงผล CSAT และ Feedback)
+# หน้าที่ 3: Dashboard
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
     df = load_table("tickets")
     
     if not df.empty:
-        # ระบบคัดกรองรายเดือน
         df['date_dt'] = pd.to_datetime(df['date'])
         df['month_year'] = df['date_dt'].dt.strftime('%m-%Y')
         selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", ["ทั้งหมด"] + sorted(df['month_year'].unique(), reverse=True))
         df_filtered = df[df['month_year'] == selected_month] if selected_month != "ทั้งหมด" else df
         
-        # สรุปตัวเลขสำคัญ (Metrics)
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("งานแจ้งซ่อม", len(df_filtered))
         resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
@@ -258,7 +256,6 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         
         st.divider()
         
-        # กราฟสถิติ
         c1, c2 = st.columns(2)
         with c1: 
             st.subheader("🏢 ปริมาณงานตามแผนก")
@@ -269,36 +266,30 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
-        # --- ส่วนรายละเอียดคะแนน CSAT เป็น % ---
+        # --- ส่วนคะแนน CSAT เป็นเปอร์เซ็นต์ และจัดวางตรงกลาง ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
-            # ฟังก์ชันแปลงคะแนนเฉลี่ยเป็นเปอร์เซ็นต์ (คะแนนเต็ม 5)
             def to_percent(val):
                 return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
 
             csat_stats = pd.DataFrame({
                 "หัวข้อการประเมิน": [
-                    "1. การสนับสนุนจากทีมงาน", 
-                    "2. คุณภาพการบริการ HW/SW", 
-                    "3. ความเป็นมืออาชีพ", 
-                    "4. ความตรงต่อเวลา", 
-                    "5. ความพึงพอใจในภาพรวม"
+                    "1. การสนับสนุนจากทีมงาน", "2. คุณภาพการบริการ HW/SW", 
+                    "3. ความเป็นมืออาชีพ", "4. ความตรงต่อเวลา", "5. ความพึงพอใจในภาพรวม"
                 ],
                 "คะแนนความพึงพอใจ (%)": [
-                    to_percent(df_filtered['q1'].mean()), 
-                    to_percent(df_filtered['q2'].mean()), 
-                    to_percent(df_filtered['q3'].mean()), 
-                    to_percent(df_filtered['q4'].mean()), 
+                    to_percent(df_filtered['q1'].mean()), to_percent(df_filtered['q2'].mean()), 
+                    to_percent(df_filtered['q3'].mean()), to_percent(df_filtered['q4'].mean()), 
                     to_percent(df_filtered['q5'].mean())
                 ]
             })
-            st.table(csat_stats)
+            # ใช้คำสั่งนี้เพื่อให้ข้อความในตารางอยู่ตรงกลาง
+            st.table(csat_stats.style.set_properties(**{'text-align': 'center'}))
 
-        # --- ส่วนข้อเสนอแนะล่าสุด (โชว์เฉพาะที่มีข้อความ) ---
+        # --- ส่วนข้อเสนอแนะล่าสุด (แสดงเฉพาะที่มีการพิมพ์ข้อความมา) ---
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
-            # กรองเฉพาะแถวที่มีข้อความ (ไม่เป็นค่าว่าง และ ไม่เป็น None)
             feedback_list = df_filtered[
-                (df_filtered['feedback'].notna()) & (df_filtered['feedback'] != "")
+                (df_filtered['feedback'].notna()) & (df_filtered['feedback'].str.strip() != "")
             ][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
             
             if not feedback_list.empty:
