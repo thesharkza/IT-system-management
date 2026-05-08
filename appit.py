@@ -252,38 +252,91 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
         with c2: st.subheader("🛠️ ประเภทปัญหาที่พบ"); st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
 
 # ==========================================
-# หน้าที่ 4: Assets
+# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - ปรับปรุงให้ซ่อนตารางทั้งหมด)
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
     st.title("🗄️ IT Asset Management")
+    
+    # --- ส่วนที่ 1: ลงทะเบียนเครื่องใหม่ ---
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
         with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
-            aid = a1.text_input("รหัสอุปกรณ์ (Asset ID)*")
-            awarranty = a1.date_input("วันที่หมดประกัน")
-            amod = a2.text_input("ยี่ห้อ/รุ่น")
-            adept = a2.selectbox("แผนก", depts)
-            if st.form_submit_button("บันทึก"):
-                insert_data("assets", {"id":aid, "model":amod, "dept":adept, "warranty_expire": str(awarranty), "status":"Active"})
-                st.success("บันทึกสำเร็จ"); st.rerun()
+            with a1:
+                aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
+                atyp = st.selectbox("ประเภท", ["PC/Laptop", "Printer", "UPS", "Network", "Monitor", "Other"])
+                awarranty = st.date_input("วันที่หมดประกัน")
+            with a2:
+                amod = st.text_input("ยี่ห้อ/รุ่น")
+                adept = st.selectbox("แผนกที่ใช้งาน", depts)
+            if st.form_submit_button("บันทึกทะเบียน"):
+                if aid:
+                    insert_data("assets", {
+                        "id": aid, "type": atyp, "model": amod, 
+                        "dept": adept, "status": "Active", 
+                        "warranty_expire": str(awarranty)
+                    })
+                    st.success(f"ลงทะเบียน {aid} สำเร็จ")
+                    st.rerun()
+                else:
+                    st.error("กรุณาระบุรหัสอุปกรณ์")
 
+    # --- ส่วนที่ 2: ระบบค้นหาประวัติและเช็คประกัน (โหลดข้อมูลเตรียมไว้แต่ไม่โชว์ตาราง) ---
     df_a = load_table("assets")
     df_t = load_table("tickets")
-    if not df_a.empty:
-        st.dataframe(df_a, use_container_width=True, hide_index=True)
-        st.divider()
-        search_query = st.text_input("🔍 ตรวจสอบประวัติเครื่อง", placeholder="พิมพ์ Asset ID...")
-        if search_query:
-            match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
-            if not match.empty:
-                target = match.iloc[0]
-                today = datetime.now().date()
-                w_date = pd.to_datetime(target['warranty_expire']).date() if pd.notna(target['warranty_expire']) else None
-                w_status = f"🔴 หมดประกัน" if w_date and w_date < today else f"🟢 อยู่ในประกัน" if w_date else "⚪ ไม่ระบุ"
-                st.info(f"**รหัส:** {target['id']} | **สถานะประกัน:** {w_status}")
-                if 'asset_id' in df_t.columns:
-                    hist = df_t[df_t['asset_id'] == target['id']]
-                    st.dataframe(hist[['date', 'root_cause', 'solution', 'cost', 'status']], use_container_width=True)
+    
+    st.divider()
+    st.subheader("🔍 ตรวจสอบประวัติและสถานะประกัน")
+    search_query = st.text_input("พิมพ์รหัสอุปกรณ์เพื่อตรวจสอบ", placeholder="เช่น IT-001")
+
+    if search_query and not df_a.empty:
+        # ค้นหาข้อมูลเครื่องจากทะเบียน
+        match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
+        
+        if not match.empty:
+            target = match.iloc[0]
+            
+            # คำนวณสถานะประกัน
+            today = datetime.now().date()
+            w_date_str = target.get('warranty_expire')
+            w_date = pd.to_datetime(w_date_str).date() if pd.notna(w_date_str) else None
+            
+            if w_date:
+                if w_date < today:
+                    w_status = "🔴 **หมดอายุการรับประกัน**"
+                else:
+                    days_left = (w_date - today).days
+                    w_status = f"🟢 **อยู่ในประกัน** (เหลือ {days_left} วัน)"
+            else:
+                w_status = "⚪ ไม่ระบุข้อมูลประกัน"
+
+            # แสดงข้อมูลอุปกรณ์แบบการ์ด
+            st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #0046ad;">
+                <h4 style="margin-top:0;">ข้อมูลอุปกรณ์: {target['id']}</h4>
+                <p><b>รุ่น:</b> {target.get('model', 'N/A')} | <b>แผนก:</b> {target.get('dept', 'N/A')}</p>
+                <p style="font-size: 1.1em;">สถานะประกัน: {w_status}</p>
+                <p>วันที่หมดประกัน: 📅 {w_date if w_date else 'N/A'}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.write("") 
+
+            # แสดงประวัติการซ่อมจากตาราง tickets
+            if 'asset_id' in df_t.columns:
+                history = df_t[df_t['asset_id'] == target['id']]
+                if not history.empty:
+                    total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
+                    st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
+                    
+                    h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
+                    h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
+                    st.dataframe(h_view, use_container_width=True, hide_index=True)
+                else:
+                    st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
+        else:
+            st.error(f"❌ ไม่พบรหัสอุปกรณ์ '{search_query}'")
+    elif not search_query:
+        st.caption("💡 กรุณาพิมพ์รหัสอุปกรณ์เพื่อดูข้อมูลและประวัติการซ่อม")
 
 # ==========================================
 # หน้าที่ 5: แผนบำรุงรักษา (PM)
