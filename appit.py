@@ -323,28 +323,46 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             else: st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
 
 # ==========================================
-# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - แก้ไข Indentation)
+# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - อัปเดต Location & Assigned User)
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
     st.title("🗄️ IT Asset Management")
+    
+    # --- ส่วนที่ 1: ลงทะเบียน (เพิ่มช่อง Location และ Assigned User) ---
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
         with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
             with a1:
                 aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
                 awarranty = st.date_input("วันที่หมดประกัน")
+                aloc = st.text_input("สถานที่ตั้ง (Location)") # เพิ่มใหม่
             with a2:
                 amod = st.text_input("ยี่ห้อ/รุ่น")
                 adept = st.selectbox("แผนกที่ใช้งาน", depts)
+                auser = st.text_input("ผู้ถือครอง/ผู้รับผิดชอบ (Assigned User)") # เพิ่มใหม่
+                
             if st.form_submit_button("บันทึกทะเบียน"):
                 if aid:
-                    insert_data("assets", {"id":aid, "model":amod, "dept":adept, "warranty_expire": str(awarranty), "status":"Active"})
-                    st.success(f"ลงทะเบียน {aid} สำเร็จ"); st.rerun()
+                    insert_data("assets", {
+                        "id": aid, 
+                        "model": amod, 
+                        "dept": adept, 
+                        "warranty_expire": str(awarranty), 
+                        "location": aloc,          # บันทึกลง DB
+                        "assigned_user": auser,    # บันทึกลง DB
+                        "status": "Active"
+                    })
+                    st.success(f"ลงทะเบียน {aid} สำเร็จ")
+                    st.rerun()
+                else:
+                    st.error("กรุณาระบุรหัสอุปกรณ์")
 
+    # --- ส่วนที่ 2: ระบบค้นหา (โชว์ Location และ Assigned User ในการแสดงผล) ---
     df_a = load_table("assets")
     df_t = load_table("tickets")
     st.divider()
     search_query = st.text_input("🔍 ตรวจสอบประวัติเครื่องรายอุปกรณ์", placeholder="พิมพ์ Asset ID...")
+    
     if search_query and not df_a.empty:
         match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
         if not match.empty:
@@ -355,24 +373,30 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             
             if w_date:
                 w_status = "🔴 **หมดอายุการรับประกัน**" if w_date < today else f"🟢 **อยู่ในประกัน** (เหลือ {(w_date - today).days} วัน)"
-            else: w_status = "⚪ ไม่ระบุข้อมูลประกัน"
+            else: 
+                w_status = "⚪ ไม่ระบุข้อมูลประกัน"
 
+            # ปรับปรุงการแสดงผล Card ให้มี Location และ Assigned User
             st.markdown(f"""
             <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #0046ad;">
                 <h4 style="margin-top:0;">ข้อมูลอุปกรณ์: {target['id']}</h4>
                 <p><b>รุ่น:</b> {target.get('model', 'N/A')} | <b>แผนก:</b> {target.get('dept', 'N/A')}</p>
+                <p><b>สถานที่ตั้ง:</b> {target.get('location', 'N/A')} | <b>ผู้รับผิดชอบ:</b> {target.get('assigned_user', 'N/A')}</p>
                 <p style="font-size: 1.1em;">สถานะประกัน: {w_status}</p>
                 <p>วันที่หมดประกัน: 📅 {w_date if w_date else 'N/A'}</p>
             </div>
             """, unsafe_allow_html=True)
             
+            # แสดงประวัติการซ่อม (คงเดิม)
             if 'asset_id' in df_t.columns:
                 hist = df_t[df_t['asset_id'] == target['id']]
                 if not hist.empty:
                     st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{pd.to_numeric(hist['cost'], errors='coerce').sum():,.2f}")
                     st.dataframe(hist[['date', 'user', 'root_cause', 'solution', 'cost', 'status']], use_container_width=True, hide_index=True)
-                else: st.info("✨ ยังไม่มีประวัติการซ่อม")
-        else: st.error("❌ ไม่พบรหัสอุปกรณ์")
+                else: 
+                    st.info("✨ ยังไม่มีประวัติการซ่อม")
+        else: 
+            st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
 # หน้าที่ 5: แผนบำรุงรักษา (PM) สมบูรณ์
