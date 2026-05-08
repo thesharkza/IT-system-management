@@ -9,49 +9,13 @@ from dateutil.relativedelta import relativedelta
 # --- CUSTOM UI STYLING ---
 st.markdown("""
     <style>
-    /* ปรับแต่งฟอนต์ภาษาไทยให้ดูทันสมัย */
     @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
-    
-    html, body, [class*="css"]  {
-        font-family: 'Prompt', sans-serif;
-    }
-
-    /* ตกแต่ง Sidebar ให้ดูโปรเฟสชันนอล */
-    [data-testid="stSidebar"] {
-        background-color: #f8f9fa;
-        border-right: 1px solid #e0e0e0;
-    }
-
-    /* ปรับแต่ง Card (Metric) ให้มีเงาและขอบโค้ง */
-    div[data-testid="metric-container"] {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-
-    /* ปรับแต่งปุ่มกด (Buttons) */
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #0046ad;
-        color: white;
-        border: none;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #002d70;
-        border: none;
-        color: white;
-    }
-
-    /* ปรับแต่งตาราง (Dataframe) */
-    .stDataFrame {
-        border-radius: 10px;
-        overflow: hidden;
-    }
+    html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
+    [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
+    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #0046ad; color: white; border: none; transition: 0.3s; }
+    .stButton>button:hover { background-color: #002d70; border: none; color: white; }
+    .stDataFrame { border-radius: 10px; overflow: hidden; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -81,18 +45,10 @@ def update_ticket_full(record_id, status, assignee, root_cause, solution, cost):
     }).eq("id", record_id).execute()
 
 def update_csat_full(record_id, q1, q2, q3, q4, q5, feedback):
-    # คำนวณค่าเฉลี่ย
     avg_score = (q1 + q2 + q3 + q4 + q5) / 5
-    
-    # ปรับปรุง: ใช้ round() เพื่อให้มั่นใจว่าเป็นตัวเลขที่เหมาะสม
     supabase.table("tickets").update({
-        "q1": int(q1), 
-        "q2": int(q2), 
-        "q3": int(q3), 
-        "q4": int(q4), 
-        "q5": int(q5),
-        "feedback": feedback, 
-        "rating": round(avg_score, 2) # เก็บเป็นทศนิยม 2 ตำแหน่ง
+        "q1": int(q1), "q2": int(q2), "q3": int(q3), "q4": int(q4), "q5": int(q5),
+        "feedback": feedback, "rating": round(avg_score, 2)
     }).eq("id", record_id).execute()
 
 def update_pm_full(record_id, status, pm_result):
@@ -100,9 +56,11 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
-# --- CSAT CONFIG ---
+# --- CONFIG ---
 rating_scale = {"พอใจมากที่สุด": 5, "พอใจ": 4, "ปานกลาง": 3, "ไม่พอใจ": 2, "ไม่พอใจอย่างมาก": 1}
 scale_options = list(rating_scale.keys())
+depts = ["MAT", "KD1", "QC", "Office", "Other"]
+ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
 
 # --- LOGIN SYSTEM ---
 ADMIN_PASSWORD = "itpassword123"
@@ -127,35 +85,62 @@ st.sidebar.title("🛠️ Menu")
 menu_options = ["📝 แจ้งซ่อม (User)", "💻 จัดการงานซ่อม (ช่าง)", "📊 Dashboard", "🗄️ ทะเบียนอุปกรณ์", "🔧 แผนบำรุงรักษา (PM)"] if st.session_state.is_admin else ["📝 แจ้งซ่อม (User)"]
 page = st.sidebar.radio("ไปที่หน้า", menu_options)
 
-depts = ["MAT", "KD1", "QC", "Office", "Other"]
-ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
-
 # ==========================================
-# หน้าที่ 1: แจ้งซ่อม & ประเมิน & ตารางติดตาม (User)
+# หน้าที่ 1: แจ้งซ่อม (User)
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
     st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
     tab1, tab2 = st.tabs(["🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
     
     with tab1:
-        # ฟอร์มแจ้งซ่อม (คงเดิม)
         with st.form("ticket_form"):
-            # ... (ส่วนกรอกข้อมูล) ...
+            c1, c2 = st.columns(2)
+            with c1:
+                user_name = st.text_input("ชื่อผู้แจ้ง")
+                department = st.selectbox("แผนก", depts) 
+                category = st.selectbox("ประเภทงานซ่อม", ["Hardware", "Software", "Network", "Other"])
+            with c2:
+                asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
+                urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
+                uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
+            description = st.text_area("รายละเอียดปัญหา")
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
+            
             if submitted:
-                # ... (ส่วนบันทึกข้อมูล) ...
-                st.success("บันทึกข้อมูลสำเร็จ!")
+                if user_name and description:
+                    df_existing = load_table("tickets")
+                    ticket_id = f"JOB-{len(df_existing) + 1:04d}"
+                    image_data = ""
+                    if uploaded_file:
+                        encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                        image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+                    insert_data("tickets", {
+                        "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
+                        "dept": department, "category": category, "desc": description, 
+                        "status": "รอตรวจสอบ", "urgency": urgency, "image_path": image_data, "asset_id": asset_id_input 
+                    })
+                    st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
+                    st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
+                else: st.error("❌ กรุณาระบุชื่อผู้แจ้งและรายละเอียดปัญหา")
 
-        # --- ย้ายตารางมาไว้ใน tab1 เพื่อให้ไม่โชว์ในหน้าประเมิน ---
         st.divider()
         st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
         df_tickets = load_table("tickets")
         if not df_tickets.empty:
-            # ... (ส่วนจัดการ DataFrame และการลงสีสถานะ) ...
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            df_view = df_tickets[['id', 'date', 'user', 'category', 'urgency', 'status', 'rating']].copy()
+            sort_map = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
+            df_view['sort'] = df_view['status'].map(sort_map)
+            df_view = df_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
+            df_view.rename(columns={'id':'รหัสงาน', 'date':'วันที่แจ้ง', 'user':'ผู้แจ้ง', 'category':'ประเภท', 'urgency':'ความเร่งด่วน', 'status':'สถานะ', 'rating':'คะแนนเฉลี่ย'}, inplace=True)
+            df_view['คะแนนเฉลี่ย'] = df_view['คะแนนเฉลี่ย'].apply(lambda x: "⭐" * int(round(float(x))) if pd.notna(x) else "รอประเมิน")
+            def color_status(val):
+                if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828'
+                elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17'
+                elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32'
+                return ''
+            st.dataframe(df_view.style.map(color_status, subset=['สถานะ']), use_container_width=True, hide_index=True)
 
     with tab2:
-        # --- ส่วนประเมินความพึงพอใจ จะมีแค่ฟอร์มประเมินเท่านั้น ---
         st.subheader("งานซ่อมที่รอการประเมิน")
         df_all = load_table("tickets")
         if not df_all.empty:
@@ -163,60 +148,17 @@ if page == "📝 แจ้งซ่อม (User)":
             if not ready_to_rate.empty:
                 selected_job = st.selectbox("เลือกงานซ่อมที่คุณต้องการประเมิน", ready_to_rate['id'].tolist())
                 with st.form("detailed_csat_form"):
-                    q1 = st.radio("1. คุณพอใจกับการสนับสนุนจากทีมงานมากน้อยเพียงใด?", scale_options, horizontal=True)
-                    q2 = st.radio("2. คุณให้คะแนนคุณภาพการบริการ HW/SW อย่างไร?", scale_options, horizontal=True)
-                    q3 = st.radio("3. ความมืออาชีพและความเชี่ยวชาญของทีมงาน?", scale_options, horizontal=True)
+                    q1 = st.radio("1. ความพอใจการสนับสนุนจากทีมงาน?", scale_options, horizontal=True)
+                    q2 = st.radio("2. คุณภาพการบริการ HW/SW?", scale_options, horizontal=True)
+                    q3 = st.radio("3. ความมืออาชีพของทีมงาน?", scale_options, horizontal=True)
                     q4 = st.radio("4. การบริการที่ตรงต่อเวลา?", scale_options, horizontal=True)
-                    q5 = st.radio("5. ความพึงพอใจในภาพรวมครั้งนี้?", scale_options, horizontal=True)
+                    q5 = st.radio("5. ความพึงพอใจในภาพรวม?", scale_options, horizontal=True)
                     fback = st.text_area("ข้อเสนอแนะเพิ่มเติม")
                     if st.form_submit_button("บันทึกการประเมิน"):
                         update_csat_full(selected_job, rating_scale[q1], rating_scale[q2], rating_scale[q3], rating_scale[q4], rating_scale[q5], fback)
-                        st.success("ขอบคุณสำหรับคะแนนประเมินครับ!")
+                        st.success("ขอบคุณสำหรับคะแนนครับ!")
                         st.rerun()
-            else: 
-                st.info("ไม่มีงานซ่อมที่รอการประเมิน")
-
-   # --- ส่วนตารางติดตามสถานะหน้า User ---
-    st.divider()
-    st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
-    df_tickets = load_table("tickets")
-    
-    if not df_tickets.empty:
-        df_view = df_tickets[['id', 'date', 'user', 'category', 'urgency', 'status', 'rating']].copy()
-        
-        # เรียงลำดับ (Pending ขึ้นก่อน)
-        sort_map = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
-        df_view['sort'] = df_view['status'].map(sort_map)
-        df_view = df_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
-        
-        df_view.rename(columns={
-            'id':'รหัสงาน', 'date':'วันที่แจ้ง', 'user':'ผู้แจ้ง',
-            'category':'ประเภท', 'urgency':'ความเร่งด่วน', 'status':'สถานะ', 'rating':'คะแนนเฉลี่ย'
-        }, inplace=True)
-        
-        # --- ฟังก์ชันใหม่: แปลงตัวเลขเป็นดาว ---
-        def display_stars(val):
-            if pd.isna(val):  # ถ้าตารางว่างเปล่า (ยังไม่ประเมิน)
-                return "รอประเมิน"
-            else:
-                star_count = int(round(float(val))) # ปัดเศษเป็นจำนวนเต็ม
-                return "⭐" * star_count # สร้างดาวตามจำนวนตัวเลข
-                
-        # นำฟังก์ชันมาครอบคอลัมน์คะแนนเฉลี่ย
-        df_view['คะแนนเฉลี่ย'] = df_view['คะแนนเฉลี่ย'].apply(display_stars)
-        # -----------------------------------
-        
-        def color_status(val):
-            if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828'
-            elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17'
-            elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a'
-            elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32'
-            return ''
-        
-        try: styled_df = df_view.style.applymap(color_status, subset=['สถานะ'])
-        except: styled_df = df_view.style.map(color_status, subset=['สถานะ'])
-            
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            else: st.info("ไม่มีงานซ่อมที่รอการประเมิน")
 
 # ==========================================
 # หน้าที่ 2: จัดการงานซ่อม (ช่าง)
@@ -224,377 +166,132 @@ if page == "📝 แจ้งซ่อม (User)":
 elif page == "💻 จัดการงานซ่อม (ช่าง)" and st.session_state.is_admin:
     st.header("💻 รายการงานซ่อมและอัปเดตสถานะ")
     df_tickets = load_table("tickets")
-    
     if not df_tickets.empty:
-        # 1. เตรียมตารางสำหรับแสดงผล (เปลี่ยนชื่อหัวข้อให้เหมือนหน้า User)
         df_manage_view = df_tickets[['id', 'date', 'user', 'dept', 'category', 'urgency', 'status']].copy()
-        
-        # เรียงลำดับงาน (Pending ขึ้นก่อน)
-        sort_map = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
-        df_manage_view['sort'] = df_manage_view['status'].map(sort_map)
-        df_manage_view = df_manage_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
-
-        df_manage_view.rename(columns={
-            'id': 'รหัสงาน',
-            'date': 'วันที่แจ้ง',
-            'user': 'ผู้แจ้ง',
-            'dept': 'แผนก',
-            'category': 'ประเภท',
-            'urgency': 'ความเร่งด่วน',
-            'status': 'สถานะ'
-        }, inplace=True)
-
-        # 2. ฟังก์ชันลงสี (อ้างอิงจากฟังก์ชันเดิมของคุณ)
-        def color_status(val):
-            if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
-            elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17; font-weight: bold'
-            elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a; font-weight: bold'
-            elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold'
-            return ''
-
-        try:
-            styled_manage = df_manage_view.style.applymap(color_status, subset=['สถานะ'])
-        except:
-            styled_manage = df_manage_view.style.map(color_status, subset=['สถานะ'])
-
-        # แสดงตารางแบบสวยงาม
-        st.dataframe(styled_manage, use_container_width=True, hide_index=True)
-        
+        df_manage_view.rename(columns={'id':'รหัสงาน','date':'วันที่แจ้ง','user':'ผู้แจ้ง','dept':'แผนก','category':'ประเภท','urgency':'ความเร่งด่วน','status':'สถานะ'}, inplace=True)
+        st.dataframe(df_manage_view, use_container_width=True, hide_index=True)
         st.divider()
-        
-        # --- ส่วนฟอร์มแก้ไขข้อมูล (ยังคงใช้ ID เดิมในการ Query) ---
-        st.subheader("🔧 อัปเดตรายละเอียดงานและปิดจ๊อบ")
         selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_tickets['id'].tolist())
         tk = df_tickets[df_tickets['id'] == selected_id].iloc[0]
-        
         with st.form("edit_job_form"):
             c1, c2 = st.columns(2)
             with c1:
                 st.info(f"**อาการที่แจ้ง:** {tk['desc']}")
-                
-                # เช็คและแสดงรูปภาพ
                 img_path = tk.get('image_path', '')
                 if img_path and str(img_path).startswith('data:image'):
-                    try: st.image(img_path, caption="รูปภาพประกอบปัญหา", width=400)
-                    except: st.error("ไม่สามารถแสดงรูปภาพได้")
-                
+                    try: st.image(img_path, caption="รูปประกอบ", width=400)
+                    except: st.error("แสดงรูปไม่ได้")
                 n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
-                assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') if pd.notna(tk.get('assignee')) else "")
-            
+                assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
             with c2:
-                root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') if pd.notna(tk.get('root_cause')) else "")
-                sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') if pd.notna(tk.get('solution')) else "")
-                cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost')) if pd.notna(tk.get('cost')) else 0.0)
-            
-            submitted = st.form_submit_button("บันทึกข้อมูลงานซ่อม")
-            
-            if submitted:
+                root = st.text_area("สาเหตุ", value=tk.get('root_cause') or "")
+                sol = st.text_area("วิธีแก้", value=tk.get('solution') or "")
+                cost = st.number_input("ค่าใช้จ่าย", value=float(tk.get('cost') or 0.0))
+            if st.form_submit_button("บันทึกข้อมูล"):
                 update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
-                st.success(f"✅ บันทึกข้อมูลงาน {selected_id} สำเร็จ!")
+                st.success("บันทึกสำเร็จ!")
                 st.rerun()
-    else:
-        st.info("ยังไม่มีงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard (Full Analytics with Monthly Filter)
+# หน้าที่ 3: Dashboard
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
-    
-    # 1. โหลดข้อมูล
     df = load_table("tickets")
-
     if not df.empty:
-        # --- ระบบคัดกรองรายเดือน (Monthly Filter) ---
-        # แปลงคอลัมน์ date เป็น datetime object เพื่อให้ดึงเดือน/ปีง่ายขึ้น
         df['date_dt'] = pd.to_datetime(df['date'])
+        df['month_year'] = df['date_dt'].dt.strftime('%m-%Y')
+        selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", ["ทั้งหมด"] + sorted(df['month_year'].unique(), reverse=True))
+        df_filtered = df[df['month_year'] == selected_month] if selected_month != "ทั้งหมด" else df
         
-        # สร้างชื่อเดือนภาษาไทยหรือรูปแบบ "Month Year"
-        df['month_year'] = df['date_dt'].dt.strftime('%m-%Y') # รูปแบบ 05-2026
-        
-        # สร้างรายการเดือนที่มีข้อมูลจริงในระบบเพื่อทำ Dropdown
-        month_list = sorted(df['month_year'].unique(), reverse=True)
-        month_options = ["ทั้งหมด"] + month_list
-        
-        # ส่วน UI สำหรับเลือกเดือน
-        col_filter1, col_filter2 = st.columns([1, 3])
-        with col_filter1:
-            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", month_options)
-        
-        # ทำการกรองข้อมูลตามเดือนที่เลือก
-        if selected_month != "ทั้งหมด":
-            df_filtered = df[df['month_year'] == selected_month].copy()
-            st.info(f"🔎 แสดงข้อมูลเฉพาะเดือน: **{selected_month}**")
-        else:
-            df_filtered = df.copy()
-            st.info("🔎 แสดงข้อมูลภาพรวมทั้งหมด")
-
-        # --- ส่วนแสดงผล (ใช้ df_filtered แทน df ทั้งหมด) ---
-        
-        # สรุปตัวเลขสำคัญแบบการ์ด 4 ใบ
         m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric("งานแจ้งซ่อม", len(df_filtered))
-        with m2:
-            resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
-            success_rate = (resolved/len(df_filtered)*100) if len(df_filtered) > 0 else 0
-            st.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{success_rate:.1f}%")
-        with m3:
-            avg_csat = df_filtered['rating'].mean()
-            st.metric("คะแนนเฉลี่ย", f"{avg_csat:.2f} ⭐" if not pd.isna(avg_csat) else "0.00 ⭐")
-        with m4:
-            pending = len(df_filtered[df_filtered['status'] == 'รอตรวจสอบ'])
-            st.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
-
-        st.markdown("---")
+        m1.metric("งานแจ้งซ่อม", len(df_filtered))
+        resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
+        m2.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{(resolved/len(df_filtered)*100):.1f}%" if len(df_filtered)>0 else "0%")
+        m3.metric("คะแนนเฉลี่ย", f"{df_filtered['rating'].mean():.2f} ⭐" if not df_filtered['rating'].isna().all() else "0.00 ⭐")
+        pending = len(df_filtered[df_filtered['status'] == 'รอตรวจสอบ'])
+        m4.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
         
-        # ส่วนแสดงกราฟสถิติ
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("🏢 ปริมาณงานแยกตามแผนก")
-            if not df_filtered.empty:
-                st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
-        with c2:
-            st.subheader("🛠️ ประเภทปัญหาที่พบบ่อย")
-            if not df_filtered.empty:
-                st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
-
         st.divider()
+        c1, c2 = st.columns(2)
+        with c1: st.subheader("🏢 ปริมาณงานตามแผนก"); st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
+        with c2: st.subheader("🛠️ ประเภทปัญหาที่พบ"); st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
 
-        # ส่วนคะแนน CSAT 5 หัวข้อ
-        with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
-            csat_stats = pd.DataFrame({
-                "หัวข้อการประเมิน": [
-                    "1. การสนับสนุนจากทีมงาน", 
-                    "2. คุณภาพการบริการ HW/SW", 
-                    "3. ความเป็นมืออาชีพ", 
-                    "4. ความตรงต่อเวลา", 
-                    "5. ความพึงพอใจในภาพรวม"
-                ],
-                "คะแนนเฉลี่ย": [
-                    df_filtered['q1'].mean(), df_filtered['q2'].mean(), 
-                    df_filtered['q3'].mean(), df_filtered['q4'].mean(), df_filtered['q5'].mean()
-                ]
-            })
-            st.table(csat_stats)
-
-        # ส่วนข้อเสนอแนะล่าสุด
-        st.subheader("💬 ข้อเสนอแนะในเดือนนี้")
-        feedback_list = df_filtered[df_filtered['feedback'].notna()][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
-        
-        if not feedback_list.empty:
-            feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
-            st.dataframe(feedback_list, use_container_width=True, hide_index=True)
-        else:
-            st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
-
-    else:
-        st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในฐานข้อมูล")
 # ==========================================
-# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ + ระบบเช็คประกัน)
+# หน้าที่ 4: Assets
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
     st.title("🗄️ IT Asset Management")
-    
-    # --- ส่วนที่ 1: ลงทะเบียน (เพิ่มช่องวันหมดประกัน) ---
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
         with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
-            with a1:
-                aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
-                atyp = st.selectbox("ประเภท", ["PC/Laptop", "Printer", "UPS", "Network", "Monitor", "Other"])
-                awarranty = st.date_input("วันที่หมดประกัน (Warranty Expire)") # เพิ่มช่องนี้
-            with a2:
-                amod = st.text_input("ยี่ห้อ/รุ่น")
-                adept = st.selectbox("แผนกที่ใช้งาน", depts)
-            if st.form_submit_button("บันทึกทะเบียน"):
-                if aid:
-                    insert_data("assets", {
-                        "id":aid, "type":atyp, "model":amod, 
-                        "dept":adept, "status":"Active", 
-                        "warranty_expire": str(awarranty) # บันทึกลง DB
-                    })
-                    st.success(f"ลงทะเบียน {aid} สำเร็จ")
-                    st.rerun()
+            aid = a1.text_input("รหัสอุปกรณ์ (Asset ID)*")
+            awarranty = a1.date_input("วันที่หมดประกัน")
+            amod = a2.text_input("ยี่ห้อ/รุ่น")
+            adept = a2.selectbox("แผนก", depts)
+            if st.form_submit_button("บันทึก"):
+                insert_data("assets", {"id":aid, "model":amod, "dept":adept, "warranty_expire": str(awarranty), "status":"Active"})
+                st.success("บันทึกสำเร็จ"); st.rerun()
 
-    st.subheader("📋 ทะเบียนอุปกรณ์ทั้งหมด")
     df_a = load_table("assets")
     df_t = load_table("tickets")
-    
     if not df_a.empty:
         st.dataframe(df_a, use_container_width=True, hide_index=True)
         st.divider()
-        
-        # --- ส่วนที่ 2: ระบบค้นหาและเช็คประกัน ---
-        st.subheader("🔍 ตรวจสอบประวัติและสถานะประกัน")
-        search_query = st.text_input("พิมพ์รหัสอุปกรณ์เพื่อตรวจสอบ", placeholder="เช่น IT-001")
-
+        search_query = st.text_input("🔍 ตรวจสอบประวัติเครื่อง", placeholder="พิมพ์ Asset ID...")
         if search_query:
-            asset_info = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
-            
-            if not asset_info.empty:
-                exact_match = asset_info[asset_info['id'].str.lower() == search_query.lower()]
-                target_asset = exact_match.iloc[0] if not exact_match.empty else asset_info.iloc[0]
-                
-                # --- ส่วนคำนวณประกัน ---
+            match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
+            if not match.empty:
+                target = match.iloc[0]
                 today = datetime.now().date()
-                w_date_str = target_asset.get('warranty_expire')
-                
-                # ตรวจสอบและเปรียบเทียบวันที่
-                if w_date_str and pd.notna(w_date_str):
-                    w_date = pd.to_datetime(w_date_str).date()
-                    if w_date < today:
-                        w_status = "🔴 **หมดอายุการรับประกัน**"
-                        w_color = "red"
-                    else:
-                        days_left = (w_date - today).days
-                        w_status = f"🟢 **อยู่ในประกัน** (เหลือ {days_left} วัน)"
-                        w_color = "green"
-                else:
-                    w_status = "⚪ ไม่ระบุข้อมูลประกัน"
-                    w_date = "N/A"
-                # -----------------------
-
-                # แสดงข้อมูลแบบ Card Layout
-                st.markdown(f"""
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid {('#d32f2f' if 'หมดอายุ' in w_status else '#2e7d32')};">
-                    <h4 style="margin-top:0;">ข้อมูลอุปกรณ์: {target_asset['id']}</h4>
-                    <p><b>รุ่น:</b> {target_asset['model']} | <b>แผนก:</b> {target_asset['dept']}</p>
-                    <p style="font-size: 1.1em;">สถานะประกัน: {w_status}</p>
-                    <p>วันที่หมดประกัน: 📅 {w_date}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.write("") # เว้นวรรค
-
-                # --- ส่วนที่ปรับปรุง: ตรวจสอบว่ามีคอลัมน์ asset_id หรือไม่ก่อนกรองข้อมูล ---
+                w_date = pd.to_datetime(target['warranty_expire']).date() if pd.notna(target['warranty_expire']) else None
+                w_status = f"🔴 หมดประกัน" if w_date and w_date < today else f"🟢 อยู่ในประกัน" if w_date else "⚪ ไม่ระบุ"
+                st.info(f"**รหัส:** {target['id']} | **สถานะประกัน:** {w_status}")
                 if 'asset_id' in df_t.columns:
-                    history = df_t[df_t['asset_id'] == target_asset['id']]
-                    
-                    if not history.empty:
-                        total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
-                        st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
-                        
-                        h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
-                        h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
-                        st.dataframe(h_view, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
-                else:
-                    st.warning("⚠️ ไม่พบคอลัมน์ 'asset_id' ในฐานข้อมูล กรุณาตรวจสอบตาราง tickets")
+                    hist = df_t[df_t['asset_id'] == target['id']]
+                    st.dataframe(hist[['date', 'root_cause', 'solution', 'cost', 'status']], use_container_width=True)
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) แบบสมบูรณ์ (แก้ไข NameError)
+# หน้าที่ 5: แผนบำรุงรักษา (PM)
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
-    
-    # 1. ประกาศสร้าง Tabs
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
-
-    # 2. โหลดข้อมูลจากฐานข้อมูลมาเก็บไว้ในตัวแปร df_pm ก่อนใช้งาน
     df_pm = load_table("pm_schedules")
 
-    # --- Tab 1: ปฏิทินงาน PM ---
     with tab_cal:
         if not df_pm.empty:
-            calendar_events = []
-            for _, row in df_pm.iterrows():
-                event_color = "#2e7d32" if row['status'] == "Completed" else "#0046ad"
-                
-                calendar_events.append({
-                    "title": f"🛠️ {row['task_name']} ({row.get('assignee', 'ไม่ระบุ')})",
-                    "start": row['next_due_date'],
-                    "end": row['next_due_date'],
-                    "color": event_color,
-                    "id": row['id']
-                })
+            events = [{"title": f"🛠️ {r['task_name']}", "start": r['next_due_date'], "color": "#2e7d32" if r['status']=="Completed" else "#0046ad"} for _, r in df_pm.iterrows()]
+            calendar(events=events, options={"headerToolbar": {"center": "title"}, "initialView": "dayGridMonth"}, key="pm_calendar")
+        else: st.info("ไม่มีแผนงานในปฏิทิน")
 
-            calendar_options = {
-                "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
-                "initialView": "dayGridMonth",
-            }
-            calendar(events=calendar_events, options=calendar_options, key="pm_calendar")
-        else:
-            st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
-
-    # --- Tab 2: รายการและบันทึกผล ---
     with tab_list:
         if not df_pm.empty:
-            df_pm_view = df_pm[['id', 'task_name', 'next_due_date', 'frequency', 'assignee', 'status']].copy()
-            df_pm_view.rename(columns={
-                'id':'รหัสงาน', 'task_name':'ชื่องาน', 'next_due_date':'กำหนดวันทำ',
-                'frequency':'ความถี่', 'assignee':'ผู้รับผิดชอบ', 'status':'สถานะ'
-            }, inplace=True)
-            st.dataframe(df_pm_view, use_container_width=True, hide_index=True)
-            
-            st.divider()
-            
-            pending_pm = df_pm[df_pm['status'] != 'Completed']
-            if not pending_pm.empty:
-                st.subheader("📝 บันทึกผลการตรวจเช็ค")
-                sel_pm = st.selectbox("เลือกงานที่จะลงบันทึก", pending_pm['id'].tolist())
-                target = df_pm[df_pm['id'] == sel_pm].iloc[0]
-                
-                with st.expander(f"📌 ดูรายละเอียด Checklist: {target['task_name']}", expanded=True):
-                    st.info(f"**รายการที่ต้องตรวจ:**\n\n{target['checklist']}")
-                    
-                    with st.form("confirm_pm_form"):
-                        pm_result = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
-                        if st.form_submit_button("✅ ยืนยันการทำ PM สำเร็จ"):
-                            update_pm_full(sel_pm, "Completed", pm_result)
-                            st.success(f"บันทึกผลงาน {sel_pm} เรียบร้อยแล้ว")
-                            st.rerun()
-            else:
-                st.success("🎉 ทุกแผนงานในระบบดำเนินการเสร็จสิ้นแล้ว!")
+            st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True)
+            pending = df_pm[df_pm['status'] != 'Completed']
+            if not pending.empty:
+                sel = st.selectbox("เลือกงานเพื่อบันทึกผล", pending['id'].tolist())
+                with st.form("pm_finish"):
+                    res = st.text_area("บันทึกผลการตรวจ")
+                    if st.form_submit_button("บันทึกสำเร็จ"):
+                        update_pm_full(sel, "Completed", res); st.rerun()
 
-    # --- Tab 3: ลงทะเบียนแผนใหม่ (ต้องย่อหน้าให้ตรงกับ with อื่นๆ) ---
     with tab_add:
-        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
-        with st.form("new_pm_automation_form"):
-            pm_name = st.text_input("ชื่องาน (Task Name)*")
-            
+        st.subheader("➕ เพิ่มแผนบำรุงรักษาอัตโนมัติ")
+        with st.form("pm_auto"):
+            name = st.text_input("ชื่องาน PM*")
             c1, c2 = st.columns(2)
-            with c1:
-                start_date = st.date_input("เริ่มตั้งแต่วันที่")
-                pm_freq = st.selectbox("ความถี่ (Frequency)", 
-                                     ["ครั้งเดียว (One-time)", "รายวัน (Daily)", "รายสัปดาห์ (Weekly)", "รายเดือน (Monthly)", "รายปี (Yearly)"])
-            with c2:
-                pm_assignee = st.text_input("ช่างผู้รับผิดชอบ")
-                occurence = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, max_value=50, value=12 if "Monthly" in pm_freq else 1)
-                
-            pm_check = st.text_area("รายการ Checklist")
-            
-            if st.form_submit_button("บันทึกและจัดตารางลงปฏิทิน"):
-                if pm_name and pm_check:
-                    current_due_date = start_date
-                    base_id = f"PM-{datetime.now().strftime('%m%S')}"
-                    
-                    for i in range(occurence):
-                        task_id = f"{base_id}-{i+1}"
-                        insert_data("pm_schedules", {
-                            "id": task_id,
-                            "task_name": f"{pm_name} (ครั้งที่ {i+1})",
-                            "next_due_date": str(current_due_date),
-                            "frequency": pm_freq,
-                            "assignee": pm_assignee,
-                            "checklist": pm_check,
-                            "status": "Scheduled"
-                        })
-                        
-                        if pm_freq == "รายวัน (Daily)":
-                            current_due_date += relativedelta(days=1)
-                        elif pm_freq == "รายสัปดาห์ (Weekly)":
-                            current_due_date += relativedelta(weeks=1)
-                        elif pm_freq == "รายเดือน (Monthly)":
-                            current_due_date += relativedelta(months=1)
-                        elif pm_freq == "รายปี (Yearly)":
-                            current_due_date += relativedelta(years=1)
-                        else:
-                            break
-                    
-                    st.toast(f"สร้างแผนงาน {occurence} ครั้ง เรียบร้อย!", icon="📅")
-                    st.success(f"ระบบจัดตารางงาน '{pm_name}' ล่วงหน้าให้แล้ว")
-                    st.rerun()
-                else:
-                    st.error("กรุณาระบุข้อมูลให้ครบถ้วน")
+            s_date = c1.date_input("เริ่มวันที่")
+            freq = c1.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายปี"])
+            assign = c2.text_input("ผู้รับผิดชอบ")
+            count = c2.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
+            check = st.text_area("Checklist")
+            if st.form_submit_button("สร้างแผนงาน"):
+                curr_date = s_date
+                for i in range(count):
+                    insert_data("pm_schedules", {"id": f"PM-{datetime.now().strftime('%m%S')}-{i}", "task_name": f"{name} ({i+1})", "next_due_date": str(curr_date), "status": "Scheduled", "assignee": assign, "checklist": check, "frequency": freq})
+                    if freq == "รายวัน": curr_date += relativedelta(days=1)
+                    elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
+                    elif freq == "รายเดือน": curr_date += relativedelta(months=1)
+                    elif freq == "รายปี": curr_date += relativedelta(years=1)
+                st.success("จัดตารางสำเร็จ"); st.rerun()
