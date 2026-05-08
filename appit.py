@@ -455,21 +455,23 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
         else: st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) - อิง Asset ID & Checklist
+# หน้าที่ 5: แผนบำรุงรักษา (PM) - ปรับ Asset ID เป็นช่องกรอก
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
     
+    # โหลดข้อมูล PM ล่าสุด
     df_pm = load_table("pm_schedules")
 
-    # --- Tab 1: ปฏิทินงาน PM ---
+    # --- Tab 1: ปฏิทินงาน PM (คลิกดูรายละเอียดได้) ---
     with tab_cal:
         st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
         if not df_pm.empty:
             calendar_events = []
             for _, row in df_pm.iterrows():
                 try:
+                    # บังคับรูปแบบวันที่ให้ถูกต้องสำหรับปฏิทิน
                     due_date = pd.to_datetime(row['next_due_date']).strftime('%Y-%m-%d')
                     calendar_events.append({
                         "id": str(row['id']),
@@ -485,8 +487,10 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 "initialView": "dayGridMonth", "selectable": True,
             }
             
-            cal_action = calendar(events=calendar_events, options=calendar_options, key="it_pm_calendar_v2")
+            # บังคับรีเฟรชปฏิทินด้วย key ที่อิงตามจำนวนงาน
+            cal_action = calendar(events=calendar_events, options=calendar_options, key=f"pm_calendar_{len(calendar_events)}")
             
+            # แสดงรายละเอียดเมื่อคลิกที่ปฏิทิน
             if cal_action and "callback" in cal_action and cal_action["callback"] == "eventClick":
                 event_id = cal_action["eventClick"]["event"]["id"]
                 clicked_event = df_pm[df_pm['id'] == event_id]
@@ -495,24 +499,20 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                     target = clicked_event.iloc[0]
                     st.markdown("---")
                     st.markdown(f"### 📌 รายละเอียดงาน: {target['task_name']}")
-                    
-                    col_info1, col_info2 = st.columns(2)
-                    with col_info1:
-                        st.write(f"**รหัสงาน:** {target['id']}")
-                        st.write(f"**วันที่กำหนดทำ:** {target['next_due_date']}")
-                        st.write(f"**ความถี่:** {target.get('frequency', 'ไม่ได้ระบุ')}")
-                    with col_info2:
-                        st.write(f"**ผู้รับผิดชอบ:** {target.get('assignee', 'ไม่ได้ระบุ')}")
-                        status_text = "🟢 เสร็จสิ้นแล้ว" if target['status'] == "Completed" else "🟡 รอดำเนินการ"
-                        st.write(f"**สถานะ:** {status_text}")
-                        
-                    st.info(f"**📝 รายการ Checklist:**\n\n{target.get('checklist', 'ไม่มีข้อมูล')}")
+                    ci1, ci2 = st.columns(2)
+                    with ci1:
+                        st.write(f"**รหัสอุปกรณ์:** {target.get('asset_id', 'N/A')}")
+                        st.write(f"**วันที่กำหนด:** {target['next_due_date']}")
+                    with ci2:
+                        st.write(f"**ผู้รับผิดชอบ:** {target.get('assignee', 'N/A')}")
+                        st.write(f"**สถานะ:** {'🟢 เสร็จสิ้น' if target['status'] == 'Completed' else '🟡 รอทำ'}")
+                    st.info(f"**📝 Checklist:**\n\n{target.get('checklist', 'ไม่มีข้อมูล')}")
                     if target['status'] == "Completed" and pd.notna(target.get('pm_result')):
-                        st.success(f"**✅ ผลการตรวจสอบ:**\n\n{target['pm_result']}")
+                        st.success(f"**✅ ผลตรวจสอบ:**\n\n{target['pm_result']}")
         else:
-            st.info("💡 ยังไม่มีข้อมูลแผนงาน PM ในฐานข้อมูล (กรุณาเพิ่มแผนใหม่ในแท็บ 'ลงทะเบียนแผนใหม่')")
+            st.info("💡 ยังไม่มีข้อมูลแผนงาน PM")
 
-    # --- Tab 2: รายการและบันทึกผล ---
+    # --- Tab 2: รายการและบันทึกผล (โชว์ Checklist ทันที) ---
     with tab_list:
         if not df_pm.empty:
             st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
@@ -524,8 +524,9 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
                 target_pm = pending[pending['id'] == sel].iloc[0]
                 
-                with st.expander(f"📌 ดูรายละเอียด Checklist: {target_pm['task_name']}", expanded=True):
-                    st.info(f"**รายการที่ต้องตรวจ:**\n\n{target_pm.get('checklist', 'ไม่มีข้อมูล Checklist')}")
+                # แสดงรายการ Checklist ของงานที่เลือกทันที
+                with st.expander(f"📌 รายการ Checklist สำหรับ: {target_pm['task_name']}", expanded=True):
+                    st.info(f"**สิ่งที่ต้องตรวจสอบ:**\n\n{target_pm.get('checklist', 'ไม่มีข้อมูล Checklist')}")
                 
                 with st.form("pm_finish_form"):
                     res = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
@@ -533,24 +534,19 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                         update_pm_full(sel, "Completed", res)
                         st.success(f"บันทึกผลงาน {sel} เรียบร้อยแล้ว"); st.rerun()
             else:
-                st.success("🎉 ทุกแผนงานในระบบดำเนินการเสร็จสิ้นแล้ว!")
+                st.success("🎉 ทุกแผนงานดำเนินการเสร็จสิ้นแล้ว!")
 
-    # --- Tab 3: ลงทะเบียนแผนใหม่ อ้างอิง Asset ID ---
+    # --- Tab 3: ลงทะเบียนแผนใหม่ (Asset ID เป็นช่องกรอก) ---
     with tab_add:
         st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
-        df_assets = load_table("assets") 
-        
         with st.form("pm_auto_form"):
-            if not df_assets.empty:
-                selected_asset = st.selectbox("เลือกอุปกรณ์ (Asset ID)*", df_assets['id'].tolist())
-                eq_type = st.selectbox("ประเภทอุปกรณ์", [
-                    "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
-                    "IPDS Printer", "TV", "CCTV", "Server room"
-                ])
-            else:
-                st.warning("กรุณาลงทะเบียนอุปกรณ์ในหน้า 'ทะเบียนอุปกรณ์' ก่อน")
-                selected_asset = None
-                eq_type = "Other"
+            # เปลี่ยนเป็นช่องกรอกข้อมูลธรรมดาตามคำขอ
+            asset_id_pm = st.text_input("รหัสอุปกรณ์ (Asset ID)*", placeholder="เช่น CCTV-001")
+            
+            eq_type = st.selectbox("ประเภทอุปกรณ์", [
+                "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
+                "IPDS Printer", "TV", "CCTV", "Server room", "Other"
+            ])
 
             c1, c2 = st.columns(2)
             with c1:
@@ -563,23 +559,23 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             check = st.text_area("รายการ Checklist")
             
             if st.form_submit_button("📅 บันทึกและจัดตารางลงปฏิทิน"):
-                if selected_asset and assign and check:
+                if asset_id_pm and assign and check:
                     curr_date = s_date
                     current_year = datetime.now().year
                     
                     for i in range(count):
-                        # สร้าง ID ตามรูปแบบ: PM-AssetID-Type(ลำดับ)ปี
-                        unique_id = f"PM-{selected_asset}-{eq_type}({i+1}/{count}){current_year}"
+                        # สร้าง ID: PM-AssetID-Type(ลำดับ/ทั้งหมด)2026
+                        unique_id = f"PM-{asset_id_pm}-{eq_type}({i+1}/{count}){current_year}"
                         
                         insert_data("pm_schedules", {
                             "id": unique_id, 
-                            "task_name": f"PM {eq_type}: {selected_asset} ({i+1}/{count})", 
+                            "task_name": f"PM {eq_type}: {asset_id_pm} ({i+1}/{count})", 
                             "next_due_date": str(curr_date), 
                             "status": "Scheduled", 
                             "assignee": assign, 
                             "checklist": check, 
                             "frequency": freq,
-                            "asset_id": selected_asset,
+                            "asset_id": asset_id_pm,
                             "equipment_type": eq_type
                         })
                         
@@ -588,7 +584,7 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                         elif freq == "รายเดือน": curr_date += relativedelta(months=1)
                         elif freq == "รายปี": curr_date += relativedelta(years=1)
                     
-                    st.success(f"✅ สร้างแผนงานสำหรับ {selected_asset} เรียบร้อย! (รหัสเริ่มต้น: PM-{selected_asset}-{eq_type}(1/{count}){current_year})")
+                    st.success(f"✅ สร้างแผนงานสำเร็จ! รหัสเริ่มต้น: PM-{asset_id_pm}-{eq_type}(1/{count}){current_year}")
                     st.rerun()
                 else:
-                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วนก่อนบันทึก (ระบุรหัสอุปกรณ์, ผู้รับผิดชอบ, Checklist)")
+                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วน (Asset ID, ผู้รับผิดชอบ, Checklist)")
