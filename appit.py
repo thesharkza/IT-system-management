@@ -274,7 +274,7 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
 # ==========================================
-# หน้าที่ 3: Dashboard
+# หน้าที่ 3: Dashboard (คะแนนเป็น % และกรองข้อเสนอแนะ)
 # ==========================================
 elif page == "📊 Dashboard" and st.session_state.is_admin:
     st.title("📈 IT Performance Overview")
@@ -320,18 +320,15 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
             if not feedback_list.empty:
                 feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
                 st.dataframe(feedback_list, use_container_width=True, hide_index=True)
-            else:
-                st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
-    else:
-        st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในระบบ")
-        
+            else: st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
+
 # ==========================================
-# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - ปรับปรุงให้ซ่อนตารางทั้งหมด)
+# หน้าที่ 4: Assets (ทะเบียนอุปกรณ์ - แก้ไข Indentation)
 # ==========================================
 elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
     st.title("🗄️ IT Asset Management")
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
-        with st.form("new_asset_form"): # <--- ตรงนี้ต้องย่อหน้าให้ตรงกัน
+        with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
             with a1:
                 aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
@@ -353,17 +350,13 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
         if not match.empty:
             target = match.iloc[0]
             today = datetime.now().date()
-            w_date = pd.to_datetime(target['warranty_expire']).date() if pd.notna(target['warranty_expire']) else None
-            w_status = "🔴 **หมดประกัน**" if w_date and w_date < today else "🟢 **ในประกัน**" if w_date else "⚪ ไม่ระบุ"
-            st.info(f"**รหัส:** {target['id']} | **รุ่น:** {target['model']} | **สถานะประกัน:** {w_status}")
-            if 'asset_id' in df_t.columns:
-                hist = df_t[df_t['asset_id'] == target['id']]
-                if not hist.empty:
-                    st.dataframe(hist[['date', 'user', 'root_cause', 'solution', 'cost', 'status']], use_container_width=True, hide_index=True)
-                else: st.info("ยังไม่มีประวัติการซ่อม")
-        else: st.error("ไม่พบรหัสอุปกรณ์")
+            w_date_str = target.get('warranty_expire')
+            w_date = pd.to_datetime(w_date_str).date() if pd.notna(w_date_str) else None
+            
+            if w_date:
+                w_status = "🔴 **หมดอายุการรับประกัน**" if w_date < today else f"🟢 **อยู่ในประกัน** (เหลือ {(w_date - today).days} วัน)"
+            else: w_status = "⚪ ไม่ระบุข้อมูลประกัน"
 
-            # แสดงข้อมูลอุปกรณ์แบบการ์ด
             st.markdown(f"""
             <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #0046ad;">
                 <h4 style="margin-top:0;">ข้อมูลอุปกรณ์: {target['id']}</h4>
@@ -373,27 +366,16 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             </div>
             """, unsafe_allow_html=True)
             
-            st.write("") 
-
-            # แสดงประวัติการซ่อมจากตาราง tickets
             if 'asset_id' in df_t.columns:
-                history = df_t[df_t['asset_id'] == target['id']]
-                if not history.empty:
-                    total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
-                    st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
-                    
-                    h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
-                    h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
-                    st.dataframe(h_view, use_container_width=True, hide_index=True)
-                else:
-                    st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
-        else:
-            st.error(f"❌ ไม่พบรหัสอุปกรณ์ '{search_query}'")
-    elif not search_query:
-        st.caption("💡 กรุณาพิมพ์รหัสอุปกรณ์เพื่อดูข้อมูลและประวัติการซ่อม")
+                hist = df_t[df_t['asset_id'] == target['id']]
+                if not hist.empty:
+                    st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{pd.to_numeric(hist['cost'], errors='coerce').sum():,.2f}")
+                    st.dataframe(hist[['date', 'user', 'root_cause', 'solution', 'cost', 'status']], use_container_width=True, hide_index=True)
+                else: st.info("✨ ยังไม่มีประวัติการซ่อม")
+        else: st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM)
+# หน้าที่ 5: แผนบำรุงรักษา (PM) สมบูรณ์
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
@@ -404,17 +386,17 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
         if not df_pm.empty:
             events = [{"title": f"🛠️ {r['task_name']}", "start": r['next_due_date'], "color": "#2e7d32" if r['status']=="Completed" else "#0046ad"} for _, r in df_pm.iterrows()]
             calendar(events=events, options={"headerToolbar": {"center": "title"}, "initialView": "dayGridMonth"}, key="pm_calendar")
-        else: st.info("ไม่มีแผนงานในปฏิทิน")
+        else: st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
 
     with tab_list:
         if not df_pm.empty:
-            st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True)
+            st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
             pending = df_pm[df_pm['status'] != 'Completed']
             if not pending.empty:
-                sel = st.selectbox("เลือกงานเพื่อบันทึกผล", pending['id'].tolist())
+                sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
                 with st.form("pm_finish"):
-                    res = st.text_area("บันทึกผลการตรวจ")
-                    if st.form_submit_button("บันทึกสำเร็จ"):
+                    res = st.text_area("บันทึกผลการตรวจสอบ")
+                    if st.form_submit_button("✅ บันทึกและปิดงาน PM"):
                         update_pm_full(sel, "Completed", res); st.rerun()
 
     with tab_add:
@@ -422,12 +404,14 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
         with st.form("pm_auto"):
             name = st.text_input("ชื่องาน PM*")
             c1, c2 = st.columns(2)
-            s_date = c1.date_input("เริ่มวันที่")
-            freq = c1.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายปี"])
-            assign = c2.text_input("ผู้รับผิดชอบ")
-            count = c2.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
+            with c1:
+                s_date = st.date_input("เริ่มวันที่")
+                freq = st.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายปี"])
+            with c2:
+                assign = st.text_input("ผู้รับผิดชอบ")
+                count = st.number_input("จำนวนครั้งล่วงหน้า", min_value=1, value=12)
             check = st.text_area("Checklist")
-            if st.form_submit_button("สร้างแผนงาน"):
+            if st.form_submit_button("บันทึกและจัดตาราง"):
                 curr_date = s_date
                 for i in range(count):
                     insert_data("pm_schedules", {"id": f"PM-{datetime.now().strftime('%m%S')}-{i}", "task_name": f"{name} ({i+1})", "next_due_date": str(curr_date), "status": "Scheduled", "assignee": assign, "checklist": check, "frequency": freq})
@@ -435,4 +419,4 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                     elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                     elif freq == "รายเดือน": curr_date += relativedelta(months=1)
                     elif freq == "รายปี": curr_date += relativedelta(years=1)
-                st.success("จัดตารางสำเร็จ"); st.rerun()
+                st.success("จัดตาราง PM เรียบร้อยแล้ว!"); st.rerun()
