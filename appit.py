@@ -410,17 +410,42 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
     df_pm = load_table("pm_schedules")
 
     with tab_cal:
+        st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
         if not df_pm.empty:
-            events = [
-                {
-                    "title": f"🛠️ {r['task_name']}", 
-                    "start": str(r['next_due_date']), 
-                    "color": "#2e7d32" if r['status'] == "Completed" else "#0046ad"
-                } for _, r in df_pm.iterrows()
-            ]
-            calendar(events=events, options={"headerToolbar": {"center": "title"}, "initialView": "dayGridMonth"}, key="pm_calendar")
+            calendar_events = []
+            for _, row in df_pm.iterrows():
+                # ตรวจสอบว่ามีข้อมูลวันที่หรือไม่
+                due_date = row.get('next_due_date')
+                if pd.notna(due_date):
+                    calendar_events.append({
+                        "id": str(row['id']),
+                        "title": f"🛠️ {row['task_name']}",
+                        "start": str(due_date), # มั่นใจว่าเป็น YYYY-MM-DD
+                        "end": str(due_date),
+                        "color": "#2e7d32" if row['status'] == "Completed" else "#0046ad",
+                        "allDay": True
+                    })
+
+            # ปรับแต่ง Options ของปฏิทินให้มีปุ่มกดเลื่อนเดือน
+            calendar_options = {
+                "headerToolbar": {
+                    "left": "prev,next today",
+                    "center": "title",
+                    "right": "dayGridMonth,dayGridWeek"
+                },
+                "initialView": "dayGridMonth",
+                "editable": False,
+                "selectable": True,
+            }
+            
+            # แสดงผลปฏิทิน
+            calendar(
+                events=calendar_events,
+                options=calendar_options,
+                key="it_pm_calendar" # เปลี่ยน Key ใหม่เพื่อให้ Component รีเฟรช
+            )
         else:
-            st.info("ยังไม่มีข้อมูลแผนงานในปฏิทิน")
+            st.info("💡 ยังไม่มีข้อมูลแผนงาน PM ในฐานข้อมูล (กรุณาเพิ่มแผนใหม่ในแท็บ 'ลงทะเบียนแผนใหม่')")
 
     with tab_list:
         if not df_pm.empty:
