@@ -400,7 +400,7 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) - เวอร์ชั่นเสถียร
+# หน้าที่ 5: แผนบำรุงรักษา (PM) - ปฏิทินคลิกได้ & แสดง Checklist
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
@@ -409,24 +409,26 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
     # โหลดข้อมูล PM ล่าสุด
     df_pm = load_table("pm_schedules")
 
+    # --- Tab 1: ปฏิทินงาน PM ---
     with tab_cal:
         st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
         if not df_pm.empty:
             calendar_events = []
             for _, row in df_pm.iterrows():
-                # ตรวจสอบว่ามีข้อมูลวันที่หรือไม่
-                due_date = row.get('next_due_date')
-                if pd.notna(due_date):
+                # 1. บังคับแปลงวันที่ให้เป็นรูปแบบ YYYY-MM-DD เพื่อป้องกันปฏิทินค้าง
+                try:
+                    due_date = pd.to_datetime(row['next_due_date']).strftime('%Y-%m-%d')
                     calendar_events.append({
                         "id": str(row['id']),
                         "title": f"🛠️ {row['task_name']}",
-                        "start": str(due_date), # มั่นใจว่าเป็น YYYY-MM-DD
-                        "end": str(due_date),
+                        "start": due_date,
+                        "end": due_date,
                         "color": "#2e7d32" if row['status'] == "Completed" else "#0046ad",
                         "allDay": True
                     })
+                except Exception:
+                    continue # ข้ามแถวที่ข้อมูลวันที่เสีย
 
-            # ปรับแต่ง Options ของปฏิทินให้มีปุ่มกดเลื่อนเดือน
             calendar_options = {
                 "headerToolbar": {
                     "left": "prev,next today",
@@ -434,34 +436,76 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                     "right": "dayGridMonth,dayGridWeek"
                 },
                 "initialView": "dayGridMonth",
-                "editable": False,
                 "selectable": True,
             }
             
-            # แสดงผลปฏิทิน
-            calendar(
+            # 2. แสดงผลปฏิทินและรับค่าการคลิกมาเก็บในตัวแปร cal_action
+            cal_action = calendar(
                 events=calendar_events,
                 options=calendar_options,
-                key="it_pm_calendar" # เปลี่ยน Key ใหม่เพื่อให้ Component รีเฟรช
+                key="it_pm_calendar_v2" # เปลี่ยน key เพื่อบังคับวาดใหม่
             )
+            
+            # 3. ระบบแสดงรายละเอียดเมื่อคลิก/แตะ ที่ปฏิทิน
+            if cal_action and "callback" in cal_action and cal_action["callback"] == "eventClick":
+                event_id = cal_action["eventClick"]["event"]["id"]
+                
+                # ดึงข้อมูลงานที่ถูกคลิก
+                clicked_event = df_pm[df_pm['id'] == event_id]
+                if not clicked_event.empty:
+                    target = clicked_event.iloc[0]
+                    st.markdown("---")
+                    st.markdown(f"### 📌 รายละเอียดงาน: {target['task_name']}")
+                    
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        st.write(f"**รหัสงาน:** {target['id']}")
+                        st.write(f"**วันที่กำหนดทำ:** {target['next_due_date']}")
+                        st.write(f"**ความถี่:** {target.get('frequency', 'ไม่ได้ระบุ')}")
+                    with col_info2:
+                        st.write(f"**ผู้รับผิดชอบ:** {target.get('assignee', 'ไม่ได้ระบุ')}")
+                        status_text = "🟢 เสร็จสิ้นแล้ว" if target['status'] == "Completed" else "🟡 รอดำเนินการ"
+                        st.write(f"**สถานะ:** {status_text}")
+                        
+                    # แสดง Checklist
+                    st.info(f"**📝 รายการ Checklist:**\n\n{target.get('checklist', 'ไม่มีข้อมูล')}")
+                    
+                    # ถ้างานเสร็จแล้ว ให้โชว์ผลการตรวจสอบด้วย
+                    if target['status'] == "Completed" and pd.notna(target.get('pm_result')):
+                        st.success(f"**✅ ผลการตรวจสอบ:**\n\n{target['pm_result']}")
+
         else:
             st.info("💡 ยังไม่มีข้อมูลแผนงาน PM ในฐานข้อมูล (กรุณาเพิ่มแผนใหม่ในแท็บ 'ลงทะเบียนแผนใหม่')")
 
+    # --- Tab 2: รายการและบันทึกผล ---
     with tab_list:
         if not df_pm.empty:
-            # แสดงเฉพาะงานที่ต้องทำ
             st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
             pending = df_pm[df_pm['status'] != 'Completed']
+            
             if not pending.empty:
+                st.divider()
                 st.subheader("📝 บันทึกผลการตรวจเช็ค")
+                
+                # เลือกงาน PM
                 sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
+                
+                # 4. แสดง Checklist ทันทีตามงานที่เลือก
+                target_pm = pending[pending['id'] == sel].iloc[0]
+                with st.expander(f"📌 ดูรายละเอียด Checklist: {target_pm['task_name']}", expanded=True):
+                    st.info(f"**รายการที่ต้องตรวจ:**\n\n{target_pm.get('checklist', 'ไม่มีข้อมูล Checklist หรือไม่ได้ระบุไว้')}")
+                
+                # ฟอร์มบันทึกผล
                 with st.form("pm_finish_form"):
                     res = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
                     if st.form_submit_button("✅ บันทึกและปิดงาน PM"):
                         update_pm_full(sel, "Completed", res)
                         st.success(f"บันทึกผลงาน {sel} เรียบร้อยแล้ว")
                         st.rerun()
+            else:
+                st.success("🎉 ทุกแผนงานในระบบดำเนินการเสร็จสิ้นแล้ว!")
 
+    # --- Tab 3: ลงทะเบียนแผนใหม่ ---
     with tab_add:
         st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
         with st.form("pm_auto_form"):
@@ -479,12 +523,9 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             if st.form_submit_button("📅 บันทึกและจัดตารางลงปฏิทิน"):
                 if name and assign and check:
                     curr_date = s_date
-                    # 1. ดึงปีปัจจุบันมาเตรียมไว้
                     current_year = datetime.now().year
                     
                     for i in range(count):
-                        # 2. สร้าง ID ตามรูปแบบที่ต้องการ: PM-(task_name)(ลำดับ/ทั้งหมด)(year)
-                        # ตัวอย่างผลลัพธ์: PM-CCTV(1/12)2026
                         unique_id = f"PM-{name}({i+1}/{count}){current_year}"
                         
                         insert_data("pm_schedules", {
@@ -497,7 +538,6 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                             "frequency": freq
                         })
                         
-                        # คำนวณวันที่ถัดไป
                         if freq == "รายวัน": curr_date += relativedelta(days=1)
                         elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                         elif freq == "รายเดือน": curr_date += relativedelta(months=1)
