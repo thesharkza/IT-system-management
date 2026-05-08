@@ -341,25 +341,12 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                 ]
             })
             
-            # แปลงข้อมูลเป็น HTML และเขียน CSS ควบคุมเฉพาะตารางนี้
-            csat_html = csat_stats.to_html(index=False, classes='csat-table', border=0)
+            # --- ส่วนที่เพิ่มเข้ามาเพื่อซ่อนเลข 0 1 2 3 4 ---
+            # ดึงคอลัมน์ "หัวข้อการประเมิน" ไปเป็นแถบหน้าสุด (Index) แทนตัวเลข
+            csat_stats.set_index("หัวข้อการประเมิน", inplace=True)
             
-            # แสดงผลผ่าน HTML (คำเตือน: ต้องลบ st.table(csat_stats) ของเก่าออกเพื่อไม่ให้ตารางซ้ำซ้อน)
-            st.markdown(f"""
-            <style>
-            .csat-table {{ width: 100%; border-collapse: collapse; font-size: 16px; margin-bottom: 1rem; }}
-            .csat-table th {{ background-color: #f8f9fa; padding: 12px; border-bottom: 2px solid #e0e0e0; color: #31333F; }}
-            .csat-table td {{ padding: 12px; border-bottom: 1px solid #f0f2f6; }}
-            
-            /* บังคับคอลัมน์ 1 (หัวข้อ) ชิดซ้ายเสมอ */
-            .csat-table th:nth-child(1), .csat-table td:nth-child(1) {{ text-align: left !important; }}
-            
-            /* บังคับคอลัมน์ 2 (คะแนน %) ไว้กึ่งกลางเสมอ */
-            .csat-table th:nth-child(2), .csat-table td:nth-child(2) {{ text-align: center !important; }}
-            </style>
-            
-            {csat_html}
-            """, unsafe_allow_html=True)
+            # แสดงผลตารางแบบสะอาดตา
+            st.table(csat_stats)
 
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
         if 'feedback' in df_filtered.columns:
