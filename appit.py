@@ -438,7 +438,7 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             if st.form_submit_button("บันทึกและจัดตาราง"):
                 curr_date = s_date
                 for i in range(count):
-                    insert_data("pm_schedules", {"id": f"PM-{datetime.now().strftime('%m%S')}-{i}", "task_name": f"{name} ({i+1})", "next_due_date": str(curr_date), "status": "Scheduled", "assignee": assign, "checklist": check, "frequency": freq})
+                    insert_data("pm_schedules", {"id": f"PM-{datetime.now().strftime('%H%M%S%f')[:10]}", "task_name": f"{name} ({i+1})", "next_due_date": str(curr_date), "status": "Scheduled", "assignee": assign, "checklist": check, "frequency": freq})
                     if freq == "รายวัน": curr_date += relativedelta(days=1)
                     elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
                     elif freq == "รายเดือน": curr_date += relativedelta(months=1)
