@@ -72,7 +72,11 @@ def update_pm_full(record_id, status, pm_result):
 # --- CONFIG ---
 rating_scale = {"พอใจมากที่สุด": 5, "พอใจ": 4, "ปานกลาง": 3, "ไม่พอใจ": 2, "ไม่พอใจอย่างมาก": 1}
 scale_options = list(rating_scale.keys())
-depts = ["MAT", "KD1", "QC", "Office", "Other"]
+depts = [
+    "CHASSIS", "PANEL", "LOGISTICS", "QC", "CCR", "FINANCE", "HR", 
+    "PROCUREMENT", "PACKAGING DESIGN", "PRODUCTION PLANNING & PROJECT CONTROL", 
+    "SERVICE PARTS DIVISION", "IMPORT-EXPORT OPERATION", "MOTOR POOL OPERATION", "Other"
+]
 ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
 
 # --- LOGIN SYSTEM ---
@@ -110,15 +114,21 @@ if page == "📝 แจ้งซ่อม (User)":
             c1, c2 = st.columns(2)
             with c1:
                 user_name = st.text_input("ชื่อผู้แจ้ง")
-                department = st.selectbox("แผนก", depts) 
-                # 1. ช่องประเภทงานเดิม
+                
+                # ส่วนที่แก้ไข: การเลือกแผนกแบบมีช่องกรอกเพิ่ม
+                dept_choice = st.selectbox("แผนก", depts)
+                if dept_choice == "Other":
+                    department = st.text_input("กรุณาระบุแผนกของคุณ")
+                else:
+                    department = dept_choice
+                
                 category = st.selectbox("ประเภทงานซ่อม (Category)", ["Hardware", "Software", "Network", "Other"])
-                # 2. เพิ่มช่องประเภทอุปกรณ์ใหม่ที่คุณต้องการ
                 eq_type = st.selectbox("ประเภทอุปกรณ์ (Equipment Type)", [
                     "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
                     "IPDS Printer", "TV", "CCTV", "IPad", "Other"
                 ])
             with c2:
+                # ... (รหัสอุปกรณ์, ความเร่งด่วน, อัปโหลดรูป เหมือนเดิม) ...
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
@@ -127,13 +137,17 @@ if page == "📝 แจ้งซ่อม (User)":
             submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
             
             if submitted:
-                if user_name and description:
-                    df_existing = load_table("tickets")
-                    ticket_id = f"JOB-{len(df_existing) + 1:04d}"
-                    image_data = ""
-                    if uploaded_file:
-                        encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                        image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+                # ตรวจสอบว่าถ้าเลือก Other ต้องกรอกชื่อแผนกด้วย
+                final_dept = department if department else "Other"
+                
+                if user_name and description and final_dept:
+                    # ... (Logic การ insert_data เหมือนเดิม แต่ใช้ final_dept) ...
+                    insert_data("tickets", {
+                        "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "user": user_name, 
+                        "dept": final_dept, "category": category, "equipment_type": eq_type,
+                        "desc": description, "status": "รอตรวจสอบ", "urgency": urgency, 
+                        "image_path": image_data, "asset_id": asset_id_input 
+                    })
                     
                     # บันทึกข้อมูลโดยเพิ่ม equipment_type เข้าไปด้วย
                     insert_data("tickets", {
@@ -334,21 +348,28 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
     
     # --- ส่วนที่ 1: ลงทะเบียนเครื่องใหม่ ---
     with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
+        with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
         with st.form("new_asset_form"):
             a1, a2 = st.columns(2)
             with a1:
                 aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
-                atyp = st.selectbox("ประเภท", ["PC/Laptop", "Printer", "UPS", "Network", "Monitor", "Other"])
                 awarranty = st.date_input("วันที่หมดประกัน")
             with a2:
                 amod = st.text_input("ยี่ห้อ/รุ่น")
-                adept = st.selectbox("แผนกที่ใช้งาน", depts)
+                
+                # ส่วนที่แก้ไข: การเลือกแผนกในหน้าทะเบียนอุปกรณ์
+                dept_choice_asset = st.selectbox("แผนกที่ใช้งาน", depts)
+                if dept_choice_asset == "Other":
+                    adept = st.text_input("กรุณาระบุชื่อแผนกใหม่")
+                else:
+                    adept = dept_choice_asset
+
             if st.form_submit_button("บันทึกทะเบียน"):
+                final_asset_dept = adept if adept else "Other"
                 if aid:
                     insert_data("assets", {
-                        "id": aid, "type": atyp, "model": amod, 
-                        "dept": adept, "status": "Active", 
-                        "warranty_expire": str(awarranty)
+                        "id": aid, "model": amod, "dept": final_asset_dept, 
+                        "warranty_expire": str(awarranty), "status": "Active"
                     })
                     st.success(f"ลงทะเบียน {aid} สำเร็จ")
                     st.rerun()
