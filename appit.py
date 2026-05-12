@@ -67,10 +67,14 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
-# --- ฟังก์ชันสร้างเอกสาร PDF ---
+# --- ฟังก์ชันสร้างเอกสาร PDF (อัปเดตแก้ปัญหาหน้ากระดาษล้น) ---
 def generate_repair_pdf(tk):
     pdf = FPDF()
     pdf.add_page()
+    
+    # ป้องกันปัญหา margin เลื่อน (ปรับให้ความกว้างใช้งานได้ 190mm พอดี)
+    pdf.set_left_margin(10)
+    pdf.set_right_margin(10)
     
     # ดึงฟอนต์ภาษาไทย (ต้องมีไฟล์ Prompt-Regular.ttf ในโฟลเดอร์)
     try:
@@ -80,43 +84,56 @@ def generate_repair_pdf(tk):
         pdf.set_font("Arial", size=16)
 
     # Header
-    pdf.cell(200, 10, txt="IT SERVICE REPORT (ใบงานซ่อมคอมพิวเตอร์)", ln=True, align='C')
+    pdf.cell(190, 10, txt="IT SERVICE REPORT (ใบงานซ่อมคอมพิวเตอร์)", align='C', ln=True)
     pdf.set_font(pdf.font_family, size=12)
-    pdf.ln(10)
-
-    # ข้อมูลทั่วไป
-    pdf.cell(100, 10, txt=f"หมายเลขงาน: {tk['id']}")
-    pdf.cell(100, 10, txt=f"วันที่แจ้ง: {tk['date']}", ln=True)
-    pdf.cell(100, 10, txt=f"ผู้แจ้ง: {tk['user']}")
-    pdf.cell(100, 10, txt=f"แผนก: {tk['dept']}", ln=True)
-    pdf.cell(100, 10, txt=f"สถานที่ตั้ง: {tk.get('location', 'ไม่ได้ระบุ')}", ln=True)
     pdf.ln(5)
+
+    # ข้อมูลทั่วไป (แบ่งกว้าง 95 + 95 = 190)
+    pdf.cell(95, 10, txt=f"หมายเลขงาน: {tk.get('id', '')}")
+    pdf.cell(95, 10, txt=f"วันที่แจ้ง: {tk.get('date', '')}", ln=True)
+    
+    pdf.cell(95, 10, txt=f"ผู้แจ้ง: {tk.get('user', '')}")
+    pdf.cell(95, 10, txt=f"แผนก: {tk.get('dept', '')}", ln=True)
+    
+    pdf.cell(190, 10, txt=f"สถานที่ตั้ง: {tk.get('location', 'ไม่ได้ระบุ')}", ln=True)
+    pdf.ln(2)
 
     # รายละเอียดอุปกรณ์
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(200, 10, txt=" รายละเอียดอุปกรณ์และปัญหา", ln=True, fill=True)
-    pdf.cell(100, 10, txt=f"ประเภทอุปกรณ์: {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
-    pdf.cell(100, 10, txt=f"รหัสทรัพย์สิน: {tk.get('asset_id', 'ไม่ได้ระบุ')}", ln=True)
-    pdf.multi_cell(0, 10, txt=f"อาการที่แจ้ง: {tk.get('desc', '')}")
-    pdf.ln(5)
+    pdf.cell(190, 10, txt=" รายละเอียดอุปกรณ์และปัญหา", ln=True, fill=True)
+    
+    pdf.cell(95, 10, txt=f"ประเภทอุปกรณ์: {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
+    pdf.cell(95, 10, txt=f"รหัสทรัพย์สิน: {tk.get('asset_id', 'ไม่ได้ระบุ')}", ln=True)
+    
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"อาการที่แจ้ง: {tk.get('desc', '')}")
+    pdf.ln(2)
 
     # รายละเอียดการซ่อม
-    pdf.cell(200, 10, txt=" รายละเอียดการแก้ไข (Technician Report)", ln=True, fill=True)
-    pdf.cell(100, 10, txt=f"ช่างผู้รับผิดชอบ: {tk.get('assignee', 'ไม่ได้ระบุ')}")
-    pdf.cell(100, 10, txt=f"สถานะ: {tk['status']}", ln=True)
-    pdf.multi_cell(0, 10, txt=f"สาเหตุ: {tk.get('root_cause', 'ไม่ได้ระบุ')}")
-    pdf.multi_cell(0, 10, txt=f"วิธีแก้ไข: {tk.get('solution', 'ไม่ได้ระบุ')}")
+    pdf.cell(190, 10, txt=" รายละเอียดการแก้ไข (Technician Report)", ln=True, fill=True)
+    
+    pdf.cell(95, 10, txt=f"ช่างผู้รับผิดชอบ: {tk.get('assignee', 'ไม่ได้ระบุ')}")
+    pdf.cell(95, 10, txt=f"สถานะ: {tk.get('status', '')}", ln=True)
+    
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"สาเหตุ: {tk.get('root_cause', '') or 'ไม่ได้ระบุ'}")
+    
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"วิธีแก้ไข: {tk.get('solution', '') or 'ไม่ได้ระบุ'}")
     
     cost_val = tk.get('cost', 0)
     try: cost_val = float(cost_val)
     except: cost_val = 0.0
-    pdf.cell(100, 10, txt=f"ค่าใช้จ่าย: {cost_val:,.2f} บาท", ln=True)
     
+    pdf.set_x(10)
+    pdf.cell(190, 10, txt=f"ค่าใช้จ่าย: {cost_val:,.2f} บาท", ln=True)
     pdf.ln(20)
+    
     # ลายเซ็น
-    pdf.cell(100, 10, txt="..........................................")
-    pdf.cell(100, 10, txt="..........................................", ln=True)
-    pdf.cell(100, 10, txt="       (ลงชื่อผู้แจ้ง/รับงาน)                   (ลงชื่อช่างผู้ซ่อม)")
+    pdf.cell(95, 10, txt="..........................................", align='C')
+    pdf.cell(95, 10, txt="..........................................", align='C', ln=True)
+    pdf.cell(95, 10, txt="(ลงชื่อผู้แจ้ง/รับงาน)", align='C')
+    pdf.cell(95, 10, txt="(ลงชื่อช่างผู้ซ่อม)", align='C', ln=True)
 
     return pdf.output()
 
@@ -289,7 +306,7 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
             selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
             tk = df_pending[df_pending['id'] == selected_id].iloc[0]
             
-            # --- ปุ่มดาวน์โหลดใบงาน PDF อยู่ตรงนี้ครับ ---
+            # --- ปุ่มดาวน์โหลดใบงาน PDF ---
             pdf_bytes = generate_repair_pdf(tk)
             st.download_button(
                 label="📥 ดาวน์โหลดใบงานซ่อม (PDF)",
