@@ -7,6 +7,8 @@ from streamlit_calendar import calendar
 from dateutil.relativedelta import relativedelta
 from fpdf import FPDF  # เพิ่มสำหรับสร้าง PDF
 import io
+import tempfile
+import os
 
 # --- CUSTOM UI STYLING ---
 st.markdown("""
@@ -77,8 +79,8 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
-# --- ฟังก์ชันสร้างเอกสาร PDF (อัปเดตแก้ปัญหาหน้ากระดาษล้น) ---
-def generate_repair_pdf(tk):
+# --- ฟังก์ชันสร้างเอกสาร PDF (อัปเดตเพิ่มรูปภาพและลายเซ็น MGR) ---
+def generate_repair_pdf(tk, img_base64=""):
     pdf = FPDF()
     pdf.add_page()
     
@@ -86,7 +88,7 @@ def generate_repair_pdf(tk):
     pdf.set_left_margin(10)
     pdf.set_right_margin(10)
     
-    # ดึงฟอนต์ภาษาไทย (ต้องมีไฟล์ Prompt-Regular.ttf ในโฟลเดอร์)
+    # ดึงฟอนต์ภาษาไทย
     try:
         pdf.add_font("ThaiFont", "", "Prompt-Regular.ttf")
         pdf.set_font("ThaiFont", size=16)
@@ -98,7 +100,7 @@ def generate_repair_pdf(tk):
     pdf.set_font(pdf.font_family, size=12)
     pdf.ln(5)
 
-    # ข้อมูลทั่วไป (แบ่งกว้าง 95 + 95 = 190)
+    # ข้อมูลทั่วไป
     pdf.cell(95, 10, txt=f"หมายเลขงาน: {tk.get('id', '')}")
     pdf.cell(95, 10, txt=f"วันที่แจ้ง: {tk.get('date', '')}", ln=True)
     
@@ -137,13 +139,45 @@ def generate_repair_pdf(tk):
     
     pdf.set_x(10)
     pdf.cell(190, 10, txt=f"ค่าใช้จ่าย: {cost_val:,.2f} บาท", ln=True)
-    pdf.ln(20)
+
+    # --- ส่วนที่เพิ่มเข้ามาใหม่: แทรกรูปภาพลง PDF ---
+    if img_base64 and str(img_base64).startswith('data:image'):
+        pdf.ln(5)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(190, 10, txt=" รูปภาพประกอบการแจ้งซ่อม", ln=True, fill=True)
+        pdf.ln(5)
+        try:
+            # แปลง Base64 เป็นไฟล์รูปภาพชั่วคราวเพื่อให้ PDF อ่านได้
+            b64_data = img_base64.split(',')[1]
+            img_bytes = base64.b64decode(b64_data)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                tmp_file.write(img_bytes)
+                tmp_file_path = tmp_file.name
+            
+            # เช็คว่าเนื้อที่ด้านล่างเหลือพอวางรูปไหม ถ้าไม่พอให้ขึ้นหน้าใหม่
+            if pdf.get_y() > 200:
+                pdf.add_page()
+                
+            pdf.image(tmp_file_path, w=90) # แทรกรูปลงไป (กว้าง 90mm)
+            pdf.ln(5)
+            os.remove(tmp_file_path) # ลบไฟล์รูปชั่วคราวทิ้งเพื่อไม่ให้หนักเซิร์ฟเวอร์
+        except Exception as e:
+            pdf.set_x(10)
+            pdf.cell(190, 10, txt="[ไม่สามารถโหลดรูปภาพลง PDF ได้]", ln=True)
+    # -----------------------------------------------
+
+    pdf.ln(15)
     
-    # ลายเซ็น
-    pdf.cell(95, 10, txt="..........................................", align='C')
-    pdf.cell(95, 10, txt="..........................................", align='C', ln=True)
-    pdf.cell(95, 10, txt="(ลงชื่อผู้แจ้ง/รับงาน)", align='C')
-    pdf.cell(95, 10, txt="(ลงชื่อช่างผู้ซ่อม)", align='C', ln=True)
+    # --- ปรับลายเซ็นเป็น 3 ช่อง (เพิ่ม MGR) ---
+    # แบ่งพื้นที่ 190mm หาร 3 จะได้ประมาณช่องละ 63mm
+    pdf.cell(63, 10, txt="................................", align='C')
+    pdf.cell(63, 10, txt="................................", align='C')
+    pdf.cell(63, 10, txt="................................", align='C', ln=True)
+    
+    pdf.cell(63, 10, txt="(ลงชื่อผู้แจ้ง/รับงาน)", align='C')
+    pdf.cell(63, 10, txt="(ลงชื่อช่างผู้ซ่อม)", align='C')
+    pdf.cell(63, 10, txt="(ผู้อนุมัติ / MGR)", align='C', ln=True)
 
     return bytes(pdf.output())
 
@@ -316,8 +350,15 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
             selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
             tk = df_pending[df_pending['id'] == selected_id].iloc[0]
             
-            # --- ปุ่มดาวน์โหลดใบงาน PDF ---
-            pdf_bytes = generate_repair_pdf(tk)
+            # --- ดึงรูปภาพแยกเฉพาะงานที่เลือก (ป้องกันแอปค้าง) ---
+            try:
+                img_res = supabase.table("tickets").select("image_path").eq("id", selected_id).execute()
+                img_path = img_res.data[0].get('image_path', '') if img_res.data else ''
+            except Exception as e:
+                img_path = ''
+
+            # --- ปุ่มดาวน์โหลดใบงาน PDF (ส่งตัวแปร img_path เข้าไปด้วย) ---
+            pdf_bytes = generate_repair_pdf(tk, img_path)
             st.download_button(
                 label="📥 ดาวน์โหลดใบงานซ่อม (PDF)",
                 data=pdf_bytes,
