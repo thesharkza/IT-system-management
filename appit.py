@@ -32,7 +32,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="Enterprise CMMS & CSAT", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ILT IT Helpdesk", layout="wide", initial_sidebar_state="expanded")
 
 # --- DATABASE SETUP ---
 @st.cache_resource
