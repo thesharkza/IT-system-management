@@ -44,12 +44,17 @@ supabase: Client = init_connection()
 # --- HELPER FUNCTIONS ---
 def load_table(table_name):
     try:
-        response = supabase.table(table_name).select("*").execute()
+        # หากเป็นตาราง tickets ให้ดึงมาทุกคอลัมน์ **ยกเว้นรูปภาพ (image_path)** เพื่อป้องกันแอปค้าง
+        if table_name == "tickets":
+            cols = "id, date, user, dept, category, equipment_type, desc, status, urgency, asset_id, location, assignee, root_cause, solution, cost, q1, q2, q3, q4, q5, rating, feedback"
+            response = supabase.table(table_name).select(cols).execute()
+        else:
+            response = supabase.table(table_name).select("*").execute()
+            
         return pd.DataFrame(response.data) if response.data else pd.DataFrame()
     except Exception as e:
-        # บรรทัดนี้จะหยุดไม่ให้แอปพัง และปริ้นข้อความ Error ตัวจริงสีแดงๆ ออกมาโชว์ที่หน้าเว็บเลย
         st.error(f"🚨 เกิดข้อผิดพลาดในการดึงข้อมูลจากตาราง '{table_name}': {str(e)}")
-        return pd.DataFrame() # ส่งตารางเปล่ากลับไปเพื่อให้แอปยังเปิดขึ้นมาได้
+        return pd.DataFrame()
 
 def insert_data(table_name, data_dict):
     supabase.table(table_name).insert(data_dict).execute()
@@ -329,10 +334,17 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
                     st.info(f"**ประเภทอุปกรณ์:** {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
                     st.info(f"**ประเภทงาน:** {tk.get('category', '')}")
                     
-                    img_path = tk.get('image_path', '')
+                    # --- โค้ดดึงรูปภาพแบบใหม่ (ดึงเฉพาะงานที่เลือกเท่านั้น) ---
+                    try:
+                        img_res = supabase.table("tickets").select("image_path").eq("id", selected_id).execute()
+                        img_path = img_res.data[0].get('image_path', '') if img_res.data else ''
+                    except Exception as e:
+                        img_path = ''
+                    
                     if img_path and str(img_path).startswith('data:image'):
                         try: st.image(img_path, caption="รูปประกอบ", width=400)
                         except: st.error("ไม่สามารถแสดงรูปภาพได้")
+                    # ----------------------------------------------------
                     
                     n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
                     assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
