@@ -43,8 +43,13 @@ supabase: Client = init_connection()
 
 # --- HELPER FUNCTIONS ---
 def load_table(table_name):
-    response = supabase.table(table_name).select("*").execute()
-    return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    try:
+        response = supabase.table(table_name).select("*").execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        # บรรทัดนี้จะหยุดไม่ให้แอปพัง และปริ้นข้อความ Error ตัวจริงสีแดงๆ ออกมาโชว์ที่หน้าเว็บเลย
+        st.error(f"🚨 เกิดข้อผิดพลาดในการดึงข้อมูลจากตาราง '{table_name}': {str(e)}")
+        return pd.DataFrame() # ส่งตารางเปล่ากลับไปเพื่อให้แอปยังเปิดขึ้นมาได้
 
 def insert_data(table_name, data_dict):
     supabase.table(table_name).insert(data_dict).execute()
