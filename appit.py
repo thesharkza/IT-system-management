@@ -5,6 +5,8 @@ from datetime import datetime
 from supabase import create_client, Client
 from streamlit_calendar import calendar
 from dateutil.relativedelta import relativedelta
+from fpdf import FPDF  # เพิ่มสำหรับสร้าง PDF
+import io
 
 # --- CUSTOM UI STYLING ---
 st.markdown("""
@@ -65,6 +67,60 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
+# --- ฟังก์ชันสร้างเอกสาร PDF ---
+def generate_repair_pdf(tk):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # ดึงฟอนต์ภาษาไทย (ต้องมีไฟล์ Prompt-Regular.ttf ในโฟลเดอร์)
+    try:
+        pdf.add_font("ThaiFont", "", "Prompt-Regular.ttf")
+        pdf.set_font("ThaiFont", size=16)
+    except:
+        pdf.set_font("Arial", size=16)
+
+    # Header
+    pdf.cell(200, 10, txt="IT SERVICE REPORT (ใบงานซ่อมคอมพิวเตอร์)", ln=True, align='C')
+    pdf.set_font(pdf.font_family, size=12)
+    pdf.ln(10)
+
+    # ข้อมูลทั่วไป
+    pdf.cell(100, 10, txt=f"หมายเลขงาน: {tk['id']}")
+    pdf.cell(100, 10, txt=f"วันที่แจ้ง: {tk['date']}", ln=True)
+    pdf.cell(100, 10, txt=f"ผู้แจ้ง: {tk['user']}")
+    pdf.cell(100, 10, txt=f"แผนก: {tk['dept']}", ln=True)
+    pdf.cell(100, 10, txt=f"สถานที่ตั้ง: {tk.get('location', 'ไม่ได้ระบุ')}", ln=True)
+    pdf.ln(5)
+
+    # รายละเอียดอุปกรณ์
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(200, 10, txt=" รายละเอียดอุปกรณ์และปัญหา", ln=True, fill=True)
+    pdf.cell(100, 10, txt=f"ประเภทอุปกรณ์: {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
+    pdf.cell(100, 10, txt=f"รหัสทรัพย์สิน: {tk.get('asset_id', 'ไม่ได้ระบุ')}", ln=True)
+    pdf.multi_cell(0, 10, txt=f"อาการที่แจ้ง: {tk.get('desc', '')}")
+    pdf.ln(5)
+
+    # รายละเอียดการซ่อม
+    pdf.cell(200, 10, txt=" รายละเอียดการแก้ไข (Technician Report)", ln=True, fill=True)
+    pdf.cell(100, 10, txt=f"ช่างผู้รับผิดชอบ: {tk.get('assignee', 'ไม่ได้ระบุ')}")
+    pdf.cell(100, 10, txt=f"สถานะ: {tk['status']}", ln=True)
+    pdf.multi_cell(0, 10, txt=f"สาเหตุ: {tk.get('root_cause', 'ไม่ได้ระบุ')}")
+    pdf.multi_cell(0, 10, txt=f"วิธีแก้ไข: {tk.get('solution', 'ไม่ได้ระบุ')}")
+    
+    cost_val = tk.get('cost', 0)
+    try: cost_val = float(cost_val)
+    except: cost_val = 0.0
+    pdf.cell(100, 10, txt=f"ค่าใช้จ่าย: {cost_val:,.2f} บาท", ln=True)
+    
+    pdf.ln(20)
+    # ลายเซ็น
+    pdf.cell(100, 10, txt="..........................................")
+    pdf.cell(100, 10, txt="..........................................", ln=True)
+    pdf.cell(100, 10, txt="       (ลงชื่อผู้แจ้ง/รับงาน)                   (ลงชื่อช่างผู้ซ่อม)")
+
+    return pdf.output()
+
+
 # --- CONFIG ---
 rating_scale = {"พอใจมากที่สุด": 5, "พอใจ": 4, "ปานกลาง": 3, "ไม่พอใจ": 2, "ไม่พอใจอย่างมาก": 1}
 scale_options = list(rating_scale.keys())
@@ -123,7 +179,6 @@ if page == "📝 แจ้งซ่อม (User)":
                 ])
             with c2:
                 asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
-                # เพิ่มช่องสถานที่ตั้งอุปกรณ์
                 loc_input = st.text_input("สถานที่ตั้งอุปกรณ์ (เช่น KD2 / เสา 4B / Mini office QC)") 
                 urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
                 uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
@@ -135,16 +190,13 @@ if page == "📝 แจ้งซ่อม (User)":
                 df_existing = load_table("tickets")
                 ticket_id = f"JOB-{len(df_existing) + 1:04d}"
                 
-                # จัดการรูปภาพ
                 image_data = ""
                 if uploaded_file:
                     encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
                     image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
 
-                # 👇 บรรทัดนี้สำคัญมาก! ต้องมีเพื่อสร้างตัวแปร final_dept ก่อนนำไปเช็คเงื่อนไขด้านล่าง
                 final_dept = department if department else "Other"
                 
-                # เมื่อมี final_dept ด้านบนแล้ว บรรทัดนี้ถึงจะทำงานได้โดยไม่ Error ครับ
                 if user_name and description and final_dept:
                     insert_data("tickets", {
                         "id": ticket_id, 
@@ -157,7 +209,8 @@ if page == "📝 แจ้งซ่อม (User)":
                         "status": "รอตรวจสอบ", 
                         "urgency": urgency, 
                         "image_path": image_data, 
-                        "asset_id": asset_id_input 
+                        "asset_id": asset_id_input,
+                        "location": loc_input # บันทึกสถานที่ตั้ง
                     })
                     st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
@@ -212,11 +265,9 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
         df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
         
         if not df_pending.empty:
-            # 1. จัดการตารางแสดงผล (เช็คให้ชัวร์ว่ามีคอลัมน์ location ก่อน เพื่อป้องกันแอปพัง)
             view_cols = ['id', 'date', 'user', 'dept', 'category', 'status']
             rename_dict = {'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง', 'dept': 'แผนก', 'category': 'ประเภท', 'status': 'สถานะ'}
             
-            # ถ้ามีคอลัมน์ location ในตาราง ให้แสดงผลด้วย
             if 'location' in df_pending.columns:
                 view_cols.insert(4, 'location')
                 rename_dict['location'] = 'สถานที่ตั้ง'
@@ -234,14 +285,19 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
             
             st.divider()
             
-            # 2. ส่วนเลือกงานที่ต้องการแก้ไข
             st.subheader("🔧 อัปเดตรายละเอียดและปิดงาน")
             selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
-            
-            # ประกาศตัวแปร tk หลังจากเลือกรหัสงานแล้ว (แก้ปัญหา name 'tk' is not defined)
             tk = df_pending[df_pending['id'] == selected_id].iloc[0]
             
-            # 3. ฟอร์มสำหรับอัปเดตงานซ่อม
+            # --- ปุ่มดาวน์โหลดใบงาน PDF อยู่ตรงนี้ครับ ---
+            pdf_bytes = generate_repair_pdf(tk)
+            st.download_button(
+                label="📥 ดาวน์โหลดใบงานซ่อม (PDF)",
+                data=pdf_bytes,
+                file_name=f"Service_Report_{selected_id}.pdf",
+                mime="application/pdf"
+            )
+            
             with st.form("edit_job_form"):
                 c1, c2 = st.columns(2)
                 
@@ -319,7 +375,6 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
 
         st.divider()
 
-        # --- ส่วนที่ปรับปรุง: จัดตำแหน่งข้อความในตาราง CSAT ---
         with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
             def to_percent(val):
                 return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
@@ -340,12 +395,7 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                     to_percent(df_filtered['q5'].mean())
                 ]
             })
-            
-            # --- ส่วนที่เพิ่มเข้ามาเพื่อซ่อนเลข 0 1 2 3 4 ---
-            # ดึงคอลัมน์ "หัวข้อการประเมิน" ไปเป็นแถบหน้าสุด (Index) แทนตัวเลข
             csat_stats.set_index("หัวข้อการประเมิน", inplace=True)
-            
-            # แสดงผลตารางแบบสะอาดตา
             st.table(csat_stats)
 
         st.subheader("💬 ข้อเสนอแนะล่าสุด")
@@ -356,7 +406,6 @@ elif page == "📊 Dashboard" and st.session_state.is_admin:
                 st.dataframe(feedback_list, use_container_width=True, hide_index=True)
             else: st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
             
-        # --- เพิ่มใหม่: สรุปผลการบำรุงรักษา (PM Coverage) ---
         st.divider()
         st.subheader("🔧 สรุปผลการบำรุงรักษา (PM Coverage)")
         df_pm_all = load_table("pm_schedules")
@@ -458,7 +507,6 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
             st.write("---")
             st.write("### 🛠️ ประวัติการซ่อมและบำรุงรักษา (PM)")
             
-            # --- แบ่ง 2 แท็บเพื่อดูซ่อม vs PM ---
             tab_repair, tab_pm_hist = st.tabs(["🔧 ประวัติการแจ้งซ่อม", "📅 ประวัติการทำ PM"])
             
             with tab_repair:
@@ -486,23 +534,20 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
         else: st.error("❌ ไม่พบรหัสอุปกรณ์")
 
 # ==========================================
-# หน้าที่ 5: แผนบำรุงรักษา (PM) - ปรับ Asset ID เป็นช่องกรอก
+# หน้าที่ 5: แผนบำรุงรักษา (PM)
 # ==========================================
 elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
     st.title("🔧 IT Preventive Maintenance System")
     tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
     
-    # โหลดข้อมูล PM ล่าสุด
     df_pm = load_table("pm_schedules")
 
-    # --- Tab 1: ปฏิทินงาน PM (คลิกดูรายละเอียดได้) ---
     with tab_cal:
         st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
         if not df_pm.empty:
             calendar_events = []
             for _, row in df_pm.iterrows():
                 try:
-                    # บังคับรูปแบบวันที่ให้ถูกต้องสำหรับปฏิทิน
                     due_date = pd.to_datetime(row['next_due_date']).strftime('%Y-%m-%d')
                     calendar_events.append({
                         "id": str(row['id']),
@@ -518,10 +563,8 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 "initialView": "dayGridMonth", "selectable": True,
             }
             
-            # บังคับรีเฟรชปฏิทินด้วย key ที่อิงตามจำนวนงาน
             cal_action = calendar(events=calendar_events, options=calendar_options, key=f"pm_calendar_{len(calendar_events)}")
             
-            # แสดงรายละเอียดเมื่อคลิกที่ปฏิทิน
             if cal_action and "callback" in cal_action and cal_action["callback"] == "eventClick":
                 event_id = cal_action["eventClick"]["event"]["id"]
                 clicked_event = df_pm[df_pm['id'] == event_id]
@@ -543,7 +586,6 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
         else:
             st.info("💡 ยังไม่มีข้อมูลแผนงาน PM")
 
-    # --- Tab 2: รายการและบันทึกผล (โชว์ Checklist ทันที) ---
     with tab_list:
         if not df_pm.empty:
             st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
@@ -555,7 +597,6 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                 sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
                 target_pm = pending[pending['id'] == sel].iloc[0]
                 
-                # แสดงรายการ Checklist ของงานที่เลือกทันที
                 with st.expander(f"📌 รายการ Checklist สำหรับ: {target_pm['task_name']}", expanded=True):
                     st.info(f"**สิ่งที่ต้องตรวจสอบ:**\n\n{target_pm.get('checklist', 'ไม่มีข้อมูล Checklist')}")
                 
@@ -567,11 +608,9 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
             else:
                 st.success("🎉 ทุกแผนงานดำเนินการเสร็จสิ้นแล้ว!")
 
-    # --- Tab 3: ลงทะเบียนแผนใหม่ (Asset ID เป็นช่องกรอก) ---
     with tab_add:
         st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
         with st.form("pm_auto_form"):
-            # เปลี่ยนเป็นช่องกรอกข้อมูลธรรมดาตามคำขอ
             asset_id_pm = st.text_input("รหัสอุปกรณ์ (Asset ID)*", placeholder="เช่น CCTV-001")
             
             eq_type = st.selectbox("ประเภทอุปกรณ์", [
@@ -595,7 +634,6 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                     current_year = datetime.now().year
                     
                     for i in range(count):
-                        # สร้าง ID: PM-AssetID-Type(ลำดับ/ทั้งหมด)2026
                         unique_id = f"PM-{asset_id_pm}-{eq_type}({i+1}/{count}){current_year}"
                         
                         insert_data("pm_schedules", {
