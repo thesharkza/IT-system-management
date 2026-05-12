@@ -135,7 +135,7 @@ def generate_repair_pdf(tk):
     pdf.cell(95, 10, txt="(ลงชื่อผู้แจ้ง/รับงาน)", align='C')
     pdf.cell(95, 10, txt="(ลงชื่อช่างผู้ซ่อม)", align='C', ln=True)
 
-    return pdf.output()
+    return bytes(pdf.output())
 
 
 # --- CONFIG ---
