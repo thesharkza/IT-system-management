@@ -1,330 +1,45 @@
 import streamlit as st
 import pandas as pd
-import os
-import re
-import math
-import json
-import time
-from datetime import datetime, timezone, timedelta
-import plotly.graph_objects as go
-from PIL import Image
-import google.generativeai as genai
-import numpy as np
+import base64
+from datetime import datetime
 from supabase import create_client, Client
+from streamlit_calendar import calendar
+from dateutil.relativedelta import relativedelta
+from fpdf import FPDF
+import io
+import tempfile
+import os
+import uuid  # เพิ่มสำหรับแก้ไข Race Condition (ข้อ 2)
 
-# ── must be the very first Streamlit call ──
-st.set_page_config(
-    page_title="GEM System 10.0 · The Oracle",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    page_icon="🎯"
-)
+# =========================================================
+# แก้ไขข้อ 3: ย้าย st.set_page_config() ขึ้นมาเป็นบรรทัดแรกสุด
+# ก่อน st.markdown() และคำสั่ง UI อื่น ๆ ทั้งหมด
+# =========================================================
+st.set_page_config(page_title="ILT IT Helpdesk", layout="wide", initial_sidebar_state="expanded")
 
-# ==========================================
-# 🛡️ HELPER FUNCTIONS
-# ==========================================
-def safe_json_loads(text):
-    if not text: return {}
-    try:
-        start_idx = text.find('{')
-        end_idx = text.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            clean_text = text[start_idx:end_idx+1]
-            return json.loads(clean_text)
-        return json.loads(text)
-    except Exception:
-        clean = text.replace("```json", "").replace("```", "").strip()
-        try:
-            return json.loads(clean)
-        except:
-            return {}
-
-# ==========================================
-# 🎨  NEON QUANT THEME
-# ==========================================
+# --- CUSTOM UI STYLING ---
 st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;600;800&display=swap');
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
+    html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
 
-:root {
-    --bg-primary:   #050a0e;
-    --bg-panel:     #0a1520;
-    --bg-card:      #0d1e2e;
-    --bg-card2:     #091520;
-    --neon-green:   #00ff88;
-    --neon-green2:  #00cc6a;
-    --neon-dim:     #00ff8820;
-    --neon-glow:    0 0 8px #00ff8870, 0 0 24px #00ff8828;
-    --neon-red:     #ff3b5c;
-    --neon-yellow:  #ffd600;
-    --neon-blue:    #00b4ff;
-    --border:       #0f2535;
-    --border-neon:  #00ff8835;
-    --text-main:    #c8e6d4;
-    --text-dim:     #4a7a60;
-    --text-label:   #2a5040;
-    --font-mono:    'Share Tech Mono', monospace;
-    --font-ui:      'Rajdhani', sans-serif;
-    --font-head:    'Exo 2', sans-serif;
-}
+    .stTable td, .stTable th { text-align: center !important; }
+    
+    div[data-testid="stSidebar"] .st-bo { display: none !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] label {
+        padding: 15px 20px !important;
+        border-radius: 12px !important;
+        margin-bottom: 8px !important;
+        transition: all 0.2s ease !important;
+        width: 100% !important;
+    }
+    div[data-testid="stSidebar"] div[role="radiogroup"] label p { font-size: 20px !important; font-weight: 500 !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] { background-color: #0046ad !important; }
+    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p { color: white !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
-html, body, [data-testid="stAppViewContainer"] {
-    background-color: var(--bg-primary) !important;
-    color: var(--text-main) !important;
-    font-family: var(--font-ui) !important;
-}
-[data-testid="stAppViewContainer"]::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background:
-        radial-gradient(ellipse 80% 40% at 50% -10%, #00ff8810 0%, transparent 70%),
-        repeating-linear-gradient(0deg, transparent, transparent 39px, #0f253508 40px),
-        repeating-linear-gradient(90deg, transparent, transparent 39px, #0f253508 40px);
-    pointer-events: none;
-    z-index: 0;
-}
-
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #060d14 0%, #050a0e 100%) !important;
-    border-right: 1px solid var(--border-neon) !important;
-}
-[data-testid="stSidebar"] * { font-family: var(--font-ui) !important; }
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 {
-    color: var(--neon-green) !important;
-    font-family: var(--font-head) !important;
-    font-size: 0.82rem !important;
-    letter-spacing: 0.12em !important;
-    text-transform: uppercase !important;
-}
-[data-testid="stSidebar"] label {
-    color: var(--text-dim) !important;
-    font-size: 0.76rem !important;
-    letter-spacing: 0.05em !important;
-    text-transform: uppercase !important;
-}
-
-h1 {
-    font-family: var(--font-head) !important;
-    font-weight: 800 !important;
-    font-size: 2rem !important;
-    letter-spacing: 0.04em !important;
-    color: var(--neon-green) !important;
-    text-shadow: var(--neon-glow) !important;
-}
-h2 {
-    font-family: var(--font-head) !important;
-    font-weight: 600 !important;
-    color: #88ffcc !important;
-    font-size: 1.1rem !important;
-    letter-spacing: 0.06em !important;
-    text-transform: uppercase !important;
-}
-h3, h4, h5 {
-    font-family: var(--font-ui) !important;
-    color: var(--text-main) !important;
-    letter-spacing: 0.04em !important;
-}
-
-[data-testid="stTabs"] [role="tablist"] {
-    background: var(--bg-panel) !important;
-    border-bottom: 1px solid var(--border-neon) !important;
-    gap: 2px !important;
-    padding: 4px 8px 0 !important;
-    border-radius: 6px 6px 0 0 !important;
-}
-[data-testid="stTabs"] button[role="tab"] {
-    font-family: var(--font-ui) !important;
-    font-weight: 600 !important;
-    font-size: 0.8rem !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
-    color: var(--text-dim) !important;
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    padding: 8px 16px !important;
-    transition: all 0.2s !important;
-}
-[data-testid="stTabs"] button[role="tab"]:hover {
-    color: var(--neon-green) !important;
-    background: var(--neon-dim) !important;
-}
-[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    color: var(--neon-green) !important;
-    border-bottom: 2px solid var(--neon-green) !important;
-    text-shadow: 0 0 12px #00ff88 !important;
-}
-
-[data-testid="stNumberInput"] input,
-[data-testid="stTextInput"] input,
-[data-testid="stTextArea"] textarea {
-    background: var(--bg-card2) !important;
-    color: var(--neon-green) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 1rem !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 4px !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
-}
-[data-testid="stNumberInput"] input:focus,
-[data-testid="stTextInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus {
-    border-color: var(--neon-green2) !important;
-    box-shadow: 0 0 0 2px #00ff8818 !important;
-    outline: none !important;
-}
-label[data-testid="stWidgetLabel"] {
-    color: var(--text-dim) !important;
-    font-size: 0.75rem !important;
-    letter-spacing: 0.07em !important;
-    text-transform: uppercase !important;
-    font-family: var(--font-ui) !important;
-}
-
-.stButton > button {
-    font-family: var(--font-head) !important;
-    font-weight: 700 !important;
-    font-size: 0.8rem !important;
-    letter-spacing: 0.14em !important;
-    text-transform: uppercase !important;
-    background: transparent !important;
-    color: var(--neon-green) !important;
-    border: 1px solid var(--neon-green2) !important;
-    border-radius: 3px !important;
-    padding: 8px 18px !important;
-    transition: all 0.15s ease !important;
-}
-.stButton > button:hover {
-    background: var(--neon-dim) !important;
-    box-shadow: var(--neon-glow) !important;
-    border-color: var(--neon-green) !important;
-    color: #fff !important;
-}
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #00ff8815, #00cc6a10) !important;
-    border-color: var(--neon-green) !important;
-    box-shadow: 0 0 10px #00ff8835 !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: linear-gradient(135deg, #00ff8828, #00cc6a20) !important;
-    box-shadow: var(--neon-glow) !important;
-}
-
-[data-testid="stMetric"] {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border) !important;
-    border-top: 2px solid var(--neon-green2) !important;
-    border-radius: 4px !important;
-    padding: 14px 16px !important;
-    position: relative !important;
-}
-[data-testid="stMetric"]::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--neon-green2), transparent);
-}
-[data-testid="stMetricLabel"] {
-    color: var(--text-dim) !important;
-    font-size: 0.7rem !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
-    font-family: var(--font-ui) !important;
-}
-[data-testid="stMetricValue"] {
-    color: var(--neon-green) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 1.45rem !important;
-    text-shadow: 0 0 8px #00ff8855 !important;
-}
-[data-testid="stMetricDelta"] { font-family: var(--font-mono) !important; font-size: 0.76rem !important; }
-
-[data-testid="stExpander"] {
-    border: 1px solid var(--border) !important;
-    border-radius: 4px !important;
-    background: var(--bg-card2) !important;
-}
-[data-testid="stExpander"] summary {
-    color: var(--text-main) !important;
-    font-family: var(--font-ui) !important;
-    font-size: 0.83rem !important;
-    letter-spacing: 0.07em !important;
-    padding: 10px 14px !important;
-}
-[data-testid="stExpander"] summary:hover { color: var(--neon-green) !important; }
-
-[data-testid="stRadio"] label { color: var(--text-main) !important; font-family: var(--font-ui) !important; font-size: 0.83rem !important; }
-
-hr { border-color: var(--border-neon) !important; }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: var(--text-label); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--neon-green2); }
-
-/* helpers */
-.gem-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 18px 20px;
-    margin-bottom: 14px;
-    position: relative;
-}
-.gem-panel::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, var(--neon-green2), transparent);
-    border-radius: 6px 6px 0 0;
-}
-.gem-label {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.2em;
-    color: var(--text-label);
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    border-left: 2px solid var(--neon-green2);
-    padding-left: 8px;
-}
-.gem-badge {
-    display: inline-block;
-    background: var(--neon-dim);
-    color: var(--neon-green);
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    padding: 2px 10px;
-    border-radius: 2px;
-    border: 1px solid var(--neon-green2);
-    letter-spacing: 0.08em;
-}
-.gem-ok   { color: #00ff88 !important; font-family: 'Share Tech Mono', monospace !important; font-size: 0.78rem !important; }
-.gem-warn { color: #ffd600 !important; font-family: 'Share Tech Mono', monospace !important; font-size: 0.78rem !important; }
-.gem-err  { color: #ff3b5c !important; font-family: 'Share Tech Mono', monospace !important; font-size: 0.78rem !important; }
-.gem-dim  { color: #2a5040 !important; font-family: 'Share Tech Mono', monospace !important; font-size: 0.68rem !important; }
-.gem-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #00cc6a25, transparent);
-    margin: 16px 0;
-}
-[data-testid="stNumberInput"] button {
-    background: var(--bg-card) !important;
-    color: var(--neon-green) !important;
-    border-color: var(--border) !important;
-}
-[data-testid="stNumberInput"] button:hover { background: var(--neon-dim) !important; }
-/* ซ่อนเมนู Header ที่ไม่จำเป็น */
-header {visibility: hidden;}
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
-
-
+# --- DATABASE SETUP ---
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -333,871 +48,707 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# ==========================================
-# 0. SESSION STATE
-# ==========================================
-def init_session_state():
-    defaults = {
-        'match_name': "ชื่อคู่แข่งขัน",
-        'h1x2_val': 1.0, 'd1x2_val': 1.0, 'a1x2_val': 1.0,
-        'hdp_line_val': 0.0, 'hdp_h_w_val': 0.0, 'hdp_a_w_val': 0.0,
-        'ou_line_val': 2.5, 'ou_over_w_val': 0.0, 'ou_under_w_val': 0.0,
-        'raw_text': "", 'live_hdp': 0.0, 'live_ou': 2.50,
-        'lh_s_input': 0, 'la_s_input': 0, 'current_min': 45,
-        'rc_h_chk': False, 'rc_a_chk': False
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state: st.session_state[k] = v
-
-init_session_state()
-
-def clear_inplay_data():
-    for k, v in {'lh_s_input':0,'la_s_input':0,'rc_h_chk':False,'rc_a_chk':False,'current_min':45,
-                 'pre_h':2.0,'pre_d':3.0,'pre_a':3.0,'pre_ou':2.5,
-                 'live_hdp':0.0,'live_hdp_h':0.9,'live_hdp_a':0.9,
-                 'live_ou':2.5,'live_ou_over':0.9,'live_ou_under':0.9}.items():
-        st.session_state[k] = v
-
-@st.cache_data(ttl=60)
-def load_gem_rules():
-    if not supabase: return "⚠️ ไม่สามารถเชื่อมต่อ Supabase"
+# --- HELPER FUNCTIONS ---
+def load_table(table_name):
     try:
-        r = supabase.table("gem_knowledge").select("rule_id,category,rule_text").eq("is_active",True).execute()
-        if r.data:
-            return "\n".join([f"[{i['rule_id']} - หมวด {i['category']}] {i['rule_text']}" for i in r.data])
-        return "ยังไม่มีข้อมูลกฎ"
-    except Exception as e: return f"Error: {e}"
-
-def get_dynamic_rules(target, is_live, raw_rules):
-    rules = raw_rules.split('\n')
-    out = []
-    is_ah = target in ["เจ้าบ้าน","ทีมเยือน"]
-    is_ou = target in ["สูง","ต่ำ"]
-    for rule in rules:
-        if not rule.strip(): continue
-        rl = rule.lower()
-        if is_ou and any(w in rl for w in ['เจ้าบ้าน','ทีมเยือน','ต่อ','รอง','ah']) and not any(w in rl for w in ['สูง','ต่ำ','สกอร์','o/u']): continue
-        if is_ah and any(w in rl for w in ['สูง','ต่ำ','สกอร์รวม','o/u']) and not any(w in rl for w in ['เจ้าบ้าน','ทีมเยือน','ต่อ','รอง','ah']): continue
-        if not is_live and any(w in rl for w in ['live','สด','นาที','ใบแดง','สกอร์ปัจจุบัน']): continue
-        if is_live and any(w in rl for w in ['ก่อนเตะ','pre-match','ราคาเปิด']) and not any(w in rl for w in ['live','สด','ไหล']): continue
-        out.append(rule)
-    return "\n".join(out)
-
-def clear_form_data():
-    st.session_state.raw_text = ""; st.session_state.match_name = "ชื่อคู่แข่งขัน"
-    st.session_state.h1x2_val=1.0; st.session_state.d1x2_val=1.0; st.session_state.a1x2_val=1.0
-    st.session_state.hdp_line_val=0.0; st.session_state.hdp_h_w_val=0.0; st.session_state.hdp_a_w_val=0.0
-    st.session_state.ou_line_val=2.5; st.session_state.ou_over_w_val=0.0; st.session_state.ou_under_w_val=0.0
-
-def parse_line(s):
-    s = str(s).replace(' ','').replace('+','')
-    neg = '-' in s; s = s.replace('-','')
-    try:
-        if '/' in s or ',' in s:
-            sep = '/' if '/' in s else ','
-            return (-1 if neg else 1)*((float(s.split(sep)[0])+float(s.split(sep)[1]))/2)
-        return float(s)*(-1 if neg else 1)
-    except: return 0.0
-
-# ==========================================
-# 🧮 MATH ENGINE
-# ==========================================
-def shin_devig(oh,od,oa):
-    pi=[1/oh,1/od,1/oa]; sp=sum(pi)
-    if sp<=1.0: return pi[0]/sp,pi[1]/sp,pi[2]/sp
-    lo,hi=0.0,1.0
-    for _ in range(100):
-        z=(lo+hi)/2
-        try:
-            p=[(math.sqrt(z**2+4*(1-z)*pi_i)-z)/(2*(1-z)) for pi_i in pi]
-            if sum(p)>1: lo=z
-            else: hi=z
-        except ZeroDivisionError: break
-    try: p=[(math.sqrt(z**2+4*(1-z)*pi_i)-z)/(2*(1-z)) for pi_i in pi]
-    except: p=pi
-    sp=sum(p); return p[0]/sp,p[1]/sp,p[2]/sp
-
-def poisson(k,lam): return (lam**k*math.exp(-lam))/math.factorial(k)
-
-def calc_dixon_coles_matrix(ph,pd,pa,ou,oow,uuw,rho,ch=0,ca=0,ml=90,rch=False,rca=False):
-    ow=oow+1 if oow<1.1 else oow; uw=uuw+1 if uuw<1.1 else uuw
-    op=1/ow; up=1/uw; top=op/(op+up)
-    bet=ou+0.20+((top-0.5)*2.5)
-    et=max(0.5,bet+(0.25-pd)*8.0)
-    sup=(ph-pa)*(et**0.60)
-    lh=max(0.15,(et+sup)/2)*(ml/90)**0.75; la=max(0.15,(et-sup)/2)*(ml/90)**0.75
-    if rch: lh*=0.50; la*=1.30
-    if rca: la*=0.50; lh*=1.30
-    mx=[[0.0]*10 for _ in range(10)]
-    for i in range(10):
-        for j in range(10):
-            bp=poisson(i,lh)*poisson(j,la)
-            if i==0 and j==0: tau=1-(lh*la*rho)
-            elif i==0 and j==1: tau=1+(lh*rho)
-            elif i==1 and j==0: tau=1+(la*rho)
-            elif i==1 and j==1: tau=1-rho
-            else: tau=1.0
-            mx[i][j]=max(0,bp*tau)
-    tp=sum(sum(r) for r in mx)
-    h2=h1=dr=a1=a2=0.0; pou={}
-    for i in range(10):
-        for j in range(10):
-            p=mx[i][j]/tp; fh=i+ch; fa=j+ca; d=fh-fa
-            if d>=2: h2+=p
-            elif d==1: h1+=p
-            elif d==0: dr+=p
-            elif d==-1: a1+=p
-            elif d<=-2: a2+=p
-            tg=fh+fa; pou[tg]=pou.get(tg,0)+p
-    return (h2,h1,dr,a1,a2,pou)
-
-def ev_ah(hdp,w2,w1,d,l1,l2,odds,fav):
-    b=odds-1; h=abs(hdp)
-    if h==0: return (w2+w1)*b-(l1+l2)
-    if fav:
-        if h==0.25: return (w2+w1)*b-d*0.5-(l1+l2)
-        elif h==0.5: return (w2+w1)*b-(d+l1+l2)
-        elif h==0.75: return w2*b+w1*(b/2)-(d+l1+l2)
-        elif h==1.0: return w2*b-(d+l1+l2)
-        elif h==1.25: return w2*b-w1*0.5-(d+l1+l2)
-        elif h==1.5: return w2*b-(w1+d+l1+l2)
-    else:
-        if h==0.25: return (w2+w1)*b+d*(b/2)-(l1+l2)
-        elif h==0.5: return (w2+w1+d)*b-(l1+l2)
-        elif h==0.75: return (w2+w1+d)*b-l1*0.5-l2
-        elif h==1.0: return (w2+w1+d)*b-l2
-        elif h==1.25: return (w2+w1+d)*b+l1*(b/2)-l2
-        elif h==1.5: return (w2+w1+d+l1)*b-l2
-    return 0.0
-
-def ev_ou(line,pt,odds,over):
-    b=odds-1; fl=math.floor(line); rm=line-fl
-    g=lambda cond: sum(pt.get(k,0) for k in pt if cond(k))
-    if over:
-        if rm==0.0:  return g(lambda k:k>fl)*b - g(lambda k:k<fl)
-        elif rm==0.25: return g(lambda k:k>=fl+1)*b - pt.get(fl,0)*0.5 - g(lambda k:k<fl)
-        elif rm==0.5:  return g(lambda k:k>=fl+1)*b - g(lambda k:k<=fl)
-        elif rm==0.75: return g(lambda k:k>=fl+2)*b + pt.get(fl+1,0)*(b/2) - g(lambda k:k<=fl)
-    else:
-        if rm==0.0:  return g(lambda k:k<fl)*b - g(lambda k:k>fl)
-        elif rm==0.25: return g(lambda k:k<fl)*b + pt.get(fl,0)*(b/2) - g(lambda k:k>=fl+1)
-        elif rm==0.5:  return g(lambda k:k<=fl)*b - g(lambda k:k>=fl+1)
-        elif rm==0.75: return g(lambda k:k<=fl)*b - pt.get(fl+1,0)*0.5 - g(lambda k:k>=fl+2)
-    return 0.0
-
-# ==========================================
-# 🧠 AI ENGINE
-# ==========================================
-def ai_engine(match_name,target,base_ev,hdp,odds,live=False,min=0,score="0-0",thr=0.08,stats="",fav=None):
-    raw=load_gem_rules()
-    try: db=get_dynamic_rules(target,live,raw)
-    except: db=raw
-    mode="[PRE-MATCH] เน้น Math-First 70% + GEM Rules 30%" if not live else "[IN-PLAY] Real-time + Full GEM RULES"
-    ri="" if fav is None else (" [ทีมต่อ]" if fav else " [ทีมรอง]")
-    prompt=(
-        f"CRO — Quant Sports Betting Fund\n[Match] {match_name}\n"
-        f"[Situation] {'Live '+str(min)+'min ('+score+')' if live else 'Pre-Match'}\n"
-        f"[Target] {target}{ri} line={abs(hdp)} odds={odds} BaseEV={base_ev*100:.2f}%\n"
-        f"[Stats] {stats}\n[Mode] {mode}\n[GEM RULES]\n{db}\n\n"
-        "Rules: 1.ห้ามสับสนทีมต่อ/รอง 2.Market Isolation AH≠OU 3.ระบุ RuleID 4.impact_score -1..1\n"
-        'JSON Thai: {"pros_analysis":"","cons_analysis":"","rule_triggered":"","impact_score":0.0,"final_decision":true,"final_comment":"","confidence_level":3}'
-    )
-    for attempt in range(3):
-        try:
-            model = genai.GenerativeModel('models/gemma-4-31b-it')
-            res=model.generate_content(prompt)
-            data=safe_json_loads(res.text)
-            if data:
-                imp=float(data.get('impact_score',0.0))
-                if abs(imp)>=1.0: imp/=100.0
-                data['impact_score']=imp; return data
-        except Exception as e:
-            if attempt==2:
-                return {"pros_analysis":"AI ขัดข้อง","cons_analysis":str(e),"rule_triggered":"Fallback",
-                        "impact_score":0.0,"final_decision":base_ev>=thr,
-                        "final_comment":"⚠ ยืนยันด้วย Base EV","confidence_level":1}
-            time.sleep(2)
-
-# ==========================================
-# 📊 CHART HELPERS
-# ==========================================
-def ev_gauge(val,title,thr=8.0):
-    pct=val*100
-    c="#00ff88" if pct>=thr else ("#ffd600" if pct>0 else "#ff3b5c")
-    fig=go.Figure(go.Indicator(
-        mode="gauge+number",value=pct,
-        number={'suffix':"%",'font':{'color':c,'size':30,'family':'Share Tech Mono'}},
-        title={'text':title,'font':{'size':12,'color':'#4a7a60','family':'Rajdhani'}},
-        gauge={'axis':{'range':[-20,20],'tickwidth':1,'tickcolor':"#0f2535",'tickfont':{'color':'#1a3528','size':8}},
-               'bar':{'color':c,'thickness':0.22},'bgcolor':"rgba(0,0,0,0)",'borderwidth':0,
-               'steps':[{'range':[-20,0],'color':"rgba(255,59,92,0.07)"},
-                        {'range':[0,thr],'color':"rgba(255,214,0,0.05)"},
-                        {'range':[thr,20],'color':"rgba(0,255,136,0.07)"}],
-               'threshold':{'line':{'color':c,'width':2},'thickness':0.8,'value':pct}}))
-    fig.update_layout(height=185,margin=dict(l=12,r=12,t=26,b=6),
-                      paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
-    return fig
-
-def neon_layout(fig,title=""):
-    fig.update_layout(
-        title=dict(text=title,font=dict(family="Rajdhani",size=12,color="#2a5040")),
-        paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(9,21,32,0.55)",
-        font=dict(family="Share Tech Mono",color="#4a7a60"),
-        xaxis=dict(gridcolor="#0f2535",linecolor="#0f2535",tickfont=dict(color="#2a5040")),
-        yaxis=dict(gridcolor="#0f2535",linecolor="#0f2535",tickfont=dict(color="#2a5040")),
-        legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(color="#4a7a60")),
-        margin=dict(l=8,r=8,t=36,b=8))
-    return fig
-
-def adj_hdp(v): st.session_state['live_hdp']+=v
-def adj_ou(v):  st.session_state['live_ou']+=v
-
-def save_db(rows):
-    if not rows or not supabase: return
-    try: supabase.table("investment_logs").insert(rows).execute()
-    except Exception as e: st.error(f"DB Error: {e}")
-
-def load_logs():
-    if not supabase: return pd.DataFrame()
-    try:
-        r=supabase.table("investment_logs").select("*").order("Time",desc=True).execute()
-        if r.data:
-            df=pd.DataFrame(r.data)
-            df['Time']=pd.to_datetime(df['Time'],errors='coerce')
-            for c in ['EV_Pct','Investment','Odds','Closing_Odds']:
-                df[c]=pd.to_numeric(df[c],errors='coerce').fillna(0.0)
-            if 'Result' in df.columns: df['Result']=df['Result'].fillna("")
-            return df.dropna(subset=['Time'])
+        if table_name == "tickets":
+            cols = "id, date, user, dept, category, equipment_type, desc, status, urgency, asset_id, location, assignee, root_cause, solution, cost, q1, q2, q3, q4, q5, rating, feedback"
+            response = supabase.table(table_name).select(cols).execute()
+        else:
+            response = supabase.table(table_name).select("*").execute()
+            
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"🚨 เกิดข้อผิดพลาดในการดึงข้อมูลจากตาราง '{table_name}': {str(e)}")
         return pd.DataFrame()
-    except: return pd.DataFrame()
 
-def calc_pnl(row):
-    try:
-        if pd.isna(row['Result']) or str(row['Result']).strip()=="" or float(row['Investment'])<=0: return 0.0
-        sc=re.findall(r'\d+',str(row['Result']).strip())
-        if len(sc)<2: return 0.0
-        hs,as_=int(sc[0]),int(sc[1])
-        hdp,tgt,odds,inv=float(row['HDP']),str(row['Target']).strip(),float(row['Odds']),float(row['Investment'])
-        diff=hs-as_
-        if tgt=="เจ้าบ้าน": nm=diff-hdp
-        elif tgt=="ทีมเยือน": nm=(as_-hs)+hdp
-        elif tgt=="สูง": nm=(hs+as_)-hdp
-        elif tgt=="ต่ำ": nm=hdp-(hs+as_)
-        else: return 0.0
-        if nm>0.25: return inv*(odds-1)
-        elif nm==0.25: return inv*(odds-1)/2
-        elif nm==0: return 0.0
-        elif nm==-0.25: return -(inv/2)
-        else: return -inv
-    except: return 0.0
+def insert_data(table_name, data_dict):
+    supabase.table(table_name).insert(data_dict).execute()
 
-def calc_clv(row):
-    try:
-        if pd.isna(row['Closing_Odds']) or float(row['Closing_Odds'])<=1.0: return 0.0
-        return ((float(row['Odds'])/float(row['Closing_Odds']))-1.0)*100.0
-    except: return 0.0
+def update_ticket_full(record_id, status, assignee, root_cause, solution, cost):
+    supabase.table("tickets").update({
+        "status": status, "assignee": assignee, "root_cause": root_cause,
+        "solution": solution, "cost": cost
+    }).eq("id", record_id).execute()
 
-def fix(o): return o+1.0 if o<1.1 else o
+def update_csat_full(record_id, q1, q2, q3, q4, q5, feedback):
+    avg_score = (q1 + q2 + q3 + q4 + q5) / 5
+    supabase.table("tickets").update({
+        "q1": int(q1), "q2": int(q2), "q3": int(q3), "q4": int(q4), "q5": int(q5),
+        "feedback": feedback, "rating": round(avg_score, 2)
+    }).eq("id", record_id).execute()
 
-# ==========================================
-# 🖥️ HEADER
-# ==========================================
-st.markdown("""
-<div style="display:flex;align-items:center;gap:14px;margin-bottom:4px;">
-  <div style="flex:1;">
-    <div style="font-family:'Share Tech Mono';font-size:0.62rem;color:#1a3528;letter-spacing:0.22em;margin-bottom:3px;">
-      ◈ QUANTITATIVE SPORTS ANALYTICS PLATFORM ◈
-    </div>
-    <h1 style="margin:0;padding:0;line-height:1.1;">
-      GEM SYSTEM <span style="color:#00cc6a;font-size:1.5rem;">10.0</span>
-      &nbsp;<span style="font-size:0.9rem;color:#2a5040;font-family:'Share Tech Mono';font-weight:400;text-shadow:none;">THE ORACLE</span>
-    </h1>
-  </div>
-  <div style="text-align:right;">
-    <div style="font-family:'Share Tech Mono';font-size:0.6rem;color:#1a3528;letter-spacing:.15em;">BUILD v10.0.11</div>
-    <span class="gem-badge">● SYSTEM ONLINE</span>
-  </div>
-</div>
-<div class="gem-divider"></div>
-""", unsafe_allow_html=True)
+def update_pm_full(record_id, status, pm_result):
+    supabase.table("pm_schedules").update({
+        "status": status, "pm_result": pm_result
+    }).eq("id", record_id).execute()
 
-# ==========================================
-# 🔧 SIDEBAR
-# ==========================================
-with st.sidebar:
-    st.markdown('<div class="gem-label">◈ AI ORACLE</div>', unsafe_allow_html=True)
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key=st.secrets["GEMINI_API_KEY"]; genai.configure(api_key=api_key)
-        st.markdown('<p class="gem-ok">▶ AI ENGINE: CONNECTED</p>', unsafe_allow_html=True)
+# =========================================================
+# แก้ไขข้อ 4 (ฟอนต์ไทยใน PDF): เพิ่มฟังก์ชัน _setup_thai_font()
+# ลำดับความสำคัญ: THSarabunNew → Prompt-Regular → fallback ใช้ latin
+# แทนที่จะ fallback เป็น Arial ซึ่งแสดงภาษาไทยไม่ได้
+# =========================================================
+def _setup_thai_font(pdf: FPDF) -> str:
+    """
+    ลองโหลดฟอนต์ที่รองรับภาษาไทยตามลำดับ
+    คืนค่าชื่อ family ที่ใช้งานได้ หรือ None ถ้าไม่พบเลย
+    """
+    font_candidates = [
+        ("ThaiSarabun", "THSarabunNew.ttf"),
+        ("ThaiPrompt",  "Prompt-Regular.ttf"),
+    ]
+    for family, filename in font_candidates:
+        if os.path.exists(filename):
+            try:
+                pdf.add_font(family, "", filename)
+                return family
+            except Exception:
+                continue
+    # ไม่พบฟอนต์ไทยเลย — ใช้ Helvetica (ตัวอักษรลาตินล้วน)
+    return None
+
+
+def generate_repair_pdf(tk, img_base64=""):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_left_margin(10)
+    pdf.set_right_margin(10)
+
+    # =========================================================
+    # แก้ไขข้อ 4: ใช้ฟังก์ชัน _setup_thai_font() แทนการ try/except เดิม
+    # =========================================================
+    thai_family = _setup_thai_font(pdf)
+    if thai_family:
+        pdf.set_font(thai_family, size=16)
     else:
-        api_key=st.text_input("Gemini API Key", type="password", placeholder="paste key here...")
-        if api_key: genai.configure(api_key=api_key); st.markdown('<p class="gem-ok">▶ CONNECTED</p>', unsafe_allow_html=True)
-        else: st.markdown('<p class="gem-warn">▶ AWAITING KEY</p>', unsafe_allow_html=True)
+        pdf.set_font("Helvetica", size=16)
+        # แสดง warning บนหน้า PDF ให้ผู้ดูแลทราบ
+        pdf.set_text_color(200, 0, 0)
+        pdf.cell(190, 8, txt="[WARNING: Thai font not found - text may not display correctly]", ln=True)
+        pdf.set_text_color(0, 0, 0)
 
-    st.markdown('<div class="gem-label" style="margin-top:10px;">◈ DATABASE</div>', unsafe_allow_html=True)
-    if supabase:
-        st.markdown('<p class="gem-ok">▶ SUPABASE: ONLINE</p>', unsafe_allow_html=True)
-        st.markdown('<p class="gem-dim">▸ CLOUD SYNC ACTIVE</p>', unsafe_allow_html=True)
-    else:
-        st.markdown('<p class="gem-err">▶ SUPABASE: OFFLINE</p>', unsafe_allow_html=True)
+    # Header
+    pdf.cell(190, 10, txt="IT SERVICE REPORT (ใบงานซ่อมคอมพิวเตอร์)", align='C', ln=True)
+    pdf.set_font(pdf.font_family, size=12)
+    pdf.ln(5)
 
-    st.markdown('<div class="gem-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="gem-label">◈ PORTFOLIO</div>', unsafe_allow_html=True)
-    total_bankroll=st.number_input("Bankroll (THB)",min_value=0.0,value=10000.0)
-    dc_rho=st.slider("Dixon-Coles Rho",-0.30,0.0,-0.10,step=0.01)
-    hdba_val=st.slider("HDBA Penalty %",0.0,10.0,1.5,step=0.5)
+    pdf.cell(95, 10, txt=f"หมายเลขงาน: {tk.get('id', '')}")
+    pdf.cell(95, 10, txt=f"วันที่แจ้ง: {tk.get('date', '')}", ln=True)
+    pdf.cell(95, 10, txt=f"ผู้แจ้ง: {tk.get('user', '')}")
+    pdf.cell(95, 10, txt=f"แผนก: {tk.get('dept', '')}", ln=True)
+    pdf.cell(190, 10, txt=f"สถานที่ตั้ง: {tk.get('location', 'ไม่ได้ระบุ')}", ln=True)
+    pdf.ln(2)
 
-    st.markdown('<div class="gem-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="gem-label">◈ EV THRESHOLDS — PRE-MATCH</div>', unsafe_allow_html=True)
-    pre_ah_thr=st.slider("AH %",1.0,15.0,5.0,step=0.5)
-    pre_ou_thr=st.slider("O/U %",1.0,15.0,5.0,step=0.5)
-    st.markdown('<div class="gem-label">◈ EV THRESHOLDS — IN-PLAY</div>', unsafe_allow_html=True)
-    live_ah_thr=st.slider("AH Live %",5.0,50.0,20.0,step=1.0)
-    live_ou_thr=st.slider("O/U Live %",5.0,50.0,20.0,step=1.0)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(190, 10, txt=" รายละเอียดอุปกรณ์และปัญหา", ln=True, fill=True)
+    pdf.cell(95, 10, txt=f"ประเภทอุปกรณ์: {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
+    pdf.cell(95, 10, txt=f"รหัสทรัพย์สิน: {tk.get('asset_id', 'ไม่ได้ระบุ')}", ln=True)
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"อาการที่แจ้ง: {tk.get('desc', '')}")
+    pdf.ln(2)
 
-pre_ah_lim=pre_ah_thr/100; pre_ou_lim=pre_ou_thr/100
-live_ah_lim=live_ah_thr/100; live_ou_lim=live_ou_thr/100
+    pdf.cell(190, 10, txt=" รายละเอียดการแก้ไข (Technician Report)", ln=True, fill=True)
+    pdf.cell(95, 10, txt=f"ช่างผู้รับผิดชอบ: {tk.get('assignee', 'ไม่ได้ระบุ')}")
+    pdf.cell(95, 10, txt=f"สถานะ: {tk.get('status', '')}", ln=True)
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"สาเหตุ: {tk.get('root_cause', '') or 'ไม่ได้ระบุ'}")
+    pdf.set_x(10)
+    pdf.multi_cell(190, 10, txt=f"วิธีแก้ไข: {tk.get('solution', '') or 'ไม่ได้ระบุ'}")
+
+    cost_val = tk.get('cost', 0)
+    try: cost_val = float(cost_val)
+    except: cost_val = 0.0
+    pdf.set_x(10)
+    pdf.cell(190, 10, txt=f"ค่าใช้จ่าย: {cost_val:,.2f} บาท", ln=True)
+
+    if img_base64 and str(img_base64).startswith('data:image'):
+        pdf.ln(5)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(190, 10, txt=" รูปภาพประกอบการแจ้งซ่อม", ln=True, fill=True)
+        pdf.ln(5)
+        try:
+            b64_data = img_base64.split(',')[1]
+            img_bytes = base64.b64decode(b64_data)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                tmp_file.write(img_bytes)
+                tmp_file_path = tmp_file.name
+            if pdf.get_y() > 200:
+                pdf.add_page()
+            pdf.image(tmp_file_path, w=90)
+            pdf.ln(5)
+            os.remove(tmp_file_path)
+        except Exception:
+            pdf.set_x(10)
+            pdf.cell(190, 10, txt="[ไม่สามารถโหลดรูปภาพลง PDF ได้]", ln=True)
+
+    pdf.ln(15)
+    pdf.cell(63, 10, txt="................................", align='C')
+    pdf.cell(63, 10, txt="................................", align='C')
+    pdf.cell(63, 10, txt="................................", align='C', ln=True)
+    pdf.cell(63, 10, txt="(ลงชื่อผู้แจ้ง/รับงาน)", align='C')
+    pdf.cell(63, 10, txt="(ลงชื่อช่างผู้ซ่อม)", align='C')
+    pdf.cell(63, 10, txt="(ผู้อนุมัติ / MGR)", align='C', ln=True)
+
+    return bytes(pdf.output())
+
+
+# --- CONFIG ---
+rating_scale = {"พอใจมากที่สุด": 5, "พอใจ": 4, "ปานกลาง": 3, "ไม่พอใจ": 2, "ไม่พอใจอย่างมาก": 1}
+scale_options = list(rating_scale.keys())
+depts = [
+    "CHASSIS", "PANEL", "LOGISTICS", "QC", "CCR", "FINANCE", "HR", 
+    "PROCUREMENT", "PACKAGING DESIGN", "PRODUCTION PLANNING & PROJECT CONTROL", 
+    "SERVICE PARTS DIVISION", "IMPORT-EXPORT OPERATION", "MOTOR POOL OPERATION", "Other"
+]
+ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ", "ส่งซ่อม", "สำเร็จ"]
+
+# --- LOGIN SYSTEM ---
+ADMIN_PASSWORD = "itpassword123"
+if "is_admin" not in st.session_state: st.session_state.is_admin = False
+
+st.sidebar.title("🔐 IT Authorization")
+if not st.session_state.is_admin:
+    admin_pass = st.sidebar.text_input("Admin Password", type="password")
+    if st.sidebar.button("Login"):
+        if admin_pass == ADMIN_PASSWORD:
+            st.session_state.is_admin = True
+            st.rerun()
+        else: st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
+else:
+    st.sidebar.success("IT Admin Mode Active")
+    if st.sidebar.button("Logout"):
+        st.session_state.is_admin = False
+        st.rerun()
+
+st.sidebar.divider()
+st.sidebar.title("🛠️ Menu")
+menu_options = ["📝 แจ้งซ่อม (User)", "💻 จัดการงานซ่อม (ช่าง)", "📊 Dashboard", "🗄️ ทะเบียนอุปกรณ์", "🔧 แผนบำรุงรักษา (PM)"] if st.session_state.is_admin else ["📝 แจ้งซ่อม (User)"]
+page = st.sidebar.radio("ไปที่หน้า", menu_options)
 
 # ==========================================
-# 📑 TABS
+# หน้าที่ 1: แจ้งซ่อม (User)
 # ==========================================
-tab1,tab2,tab3,tab4=st.tabs([
-    "  PRE-MATCH  ","  DASHBOARD  ","  IN-PLAY SNIPER  ","  BACKTEST  "
-])
-
-# ╔══════════════╗
-# ║  TAB 1       ║
-# ╚══════════════╝
-with tab1:
-    st.markdown('<div class="gem-label">◈ QUICK IMPORT</div>', unsafe_allow_html=True)
-    qi1,qi2=st.columns(2)
-    with qi1:
-        with st.expander("📷 AI VISION — Extract from image"):
-            if not api_key: st.markdown('<p class="gem-warn">▸ API Key required</p>',unsafe_allow_html=True)
-            else:
-                uf=st.file_uploader("Upload odds screenshot",type=['png','jpg'])
-                if uf and st.button("⚡ EXTRACT IMAGE",use_container_width=True):
-                    with st.spinner("Scanning Matrix..."):
-                        try:
-                            img=Image.open(uf)
-                            model = genai.GenerativeModel('models/gemma-4-31b-it')
-                            prompt_img = """คุณคือ AI Quant Analyst สกัดข้อมูลตารางราคาฟุตบอลจากภาพให้ออกมาเป็น JSON เท่านั้น โดยอิงจากโครงสร้างหน้าจอดังนี้:
-1. match_name: เอาชื่อทีมแถวบน + " VS " + ชื่อทีมแถวล่าง
-2. คอลัมน์ 'แฮนดิแคป' (ซ้ายสุด): 
-   - hdp_line_val = เรตต่อรอง **ต้องแปลงเป็นทศนิยมเท่านั้น** (เช่น 0.5/1 ให้ตอบ 0.75, 1/1.5 ให้ตอบ 1.25, 0/0.5 ให้ตอบ 0.25 โดยไม่ต้องใส่เครื่องหมาย +/-)
-   - hdp_h_w_val = ค่าน้ำทีมแถวบน
-   - hdp_a_w_val = ค่าน้ำทีมแถวล่าง
-3. คอลัมน์ 'สูง/ต่ำ' (กลาง): 
-   - ou_line_val = เรตประตูรวม **ต้องแปลงเป็นทศนิยมเท่านั้น** (เช่น 3/3.5 ให้ตอบ 3.25, 2.5/3 ให้ตอบ 2.75)
-   - ou_over_w_val = ค่าน้ำที่อยู่ใต้คำว่า 'สูง'
-   - ou_under_w_val = ค่าน้ำที่อยู่ใต้คำว่า 'ต่ำ'
-4. คอลัมน์ '1X2' (ขวาสุด): 
-   - h1x2_val = ค่าน้ำช่องบนสุด (ใต้เลข 1)
-   - a1x2_val = ค่าน้ำช่องที่สอง (ใต้เลข 2)
-   - d1x2_val = ค่าน้ำช่องล่างสุด (ใต้ตัว X)
-
-ตอบกลับมาแค่ JSON ก้อนเดียวเท่านั้น ห้ามมีข้อความอื่น:
-{"match_name":"","h1x2_val":0.0,"d1x2_val":0.0,"a1x2_val":0.0,"hdp_line_val":0.0,"hdp_h_w_val":0.0,"hdp_a_w_val":0.0,"ou_line_val":0.0,"ou_over_w_val":0.0,"ou_under_w_val":0.0}"""
-                            d=safe_json_loads(model.generate_content([prompt_img,img]).text)
-                            for k, v in d.items():
-                                if k == 'match_name':
-                                    st.session_state[k] = str(v)
-                                else:
-                                    try:
-                                        st.session_state[k] = float(v)
-                                    except ValueError:
-                                        st.session_state[k] = 0.0
-                            st.toast("✅ สกัดข้อมูลสำเร็จ!", icon="🎯"); time.sleep(1); st.rerun()
-                        except Exception as e: st.error(str(e))
-    with qi2:
-        with st.expander("⌨️ TEXT PARSER — Paste raw text"):
-            st.text_area("Paste odds...",height=75,key="raw_text")
-            tp1,tp2=st.columns(2)
-            with tp1:
-                if st.button("⚡ PARSE",use_container_width=True):
-                    try:
-                        raw=st.session_state.raw_text
-                        mv=re.search(r'(.*VS.*)',raw)
-                        if mv: st.session_state.match_name=mv.group(1).strip()
-                        hm=re.findall(r'^\s*เหย้า\s+([0-9.]+)',raw,re.MULTILINE)
-                        if len(hm)>=1: st.session_state.h1x2_val=float(hm[0])
-                        if len(hm)>=2: st.session_state.hdp_h_w_val=float(hm[1])
-                        dm=re.findall(r'^\s*เสมอ\s+([0-9.]+)',raw,re.MULTILINE)
-                        if dm: st.session_state.d1x2_val=float(dm[0])
-                        am=re.findall(r'^\s*เยือน\s+([0-9.]+)',raw,re.MULTILINE)
-                        if len(am)>=1: st.session_state.a1x2_val=float(am[0])
-                        if len(am)>=2: st.session_state.hdp_a_w_val=float(am[1])
-                        ahm=re.search(r'^\s*AH\s+([-+0-9.,/]+)',raw,re.MULTILINE)
-                        if ahm: st.session_state.hdp_line_val=parse_line(ahm.group(1))
-                        oum=re.search(r'^\s*สูง/ต่ำ\s+([-+0-9.,/]+)',raw,re.MULTILINE)
-                        if oum: st.session_state.ou_line_val=parse_line(oum.group(1))
-                        om=re.search(r'^\s*สูง\s+([0-9.]+)',raw,re.MULTILINE)
-                        if om: st.session_state.ou_over_w_val=float(om.group(1))
-                        um=re.search(r'^\s*ต่ำ\s+([0-9.]+)',raw,re.MULTILINE)
-                        if um: st.session_state.ou_under_w_val=float(um.group(1))
-                        st.toast("✅ Parsed!", icon="🎯")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e: st.error(str(e))
-            with tp2: st.button("🗑 CLEAR",use_container_width=True,on_click=clear_form_data)
-
-    st.markdown('<div class="gem-divider"></div>', unsafe_allow_html=True)
-    match_name=st.text_input("MATCH",key="match_name",placeholder="Home Team VS Away Team")
-
-    st.markdown('<div class="gem-label" style="margin-top:10px;">◈ MARKET DATA</div>', unsafe_allow_html=True)
-    mc1,mc2,mc3=st.columns(3)
-    with mc1:
-        st.markdown('<div class="gem-panel"><div class="gem-label">1X2 POOL</div>',unsafe_allow_html=True)
-        h1x2=st.number_input("HOME",format="%.2f",key="h1x2_val")
-        d1x2=st.number_input("DRAW",format="%.2f",key="d1x2_val")
-        a1x2=st.number_input("AWAY",format="%.2f",key="a1x2_val")
-        st.markdown('</div>',unsafe_allow_html=True)
-    with mc2:
-        st.markdown('<div class="gem-panel"><div class="gem-label">HANDICAP (AH)</div>',unsafe_allow_html=True)
-        hdp_line=st.number_input("LINE",format="%.2f",step=0.25,key="hdp_line_val")
-        hdp_h_w=st.number_input("HOME ODDS",format="%.2f",key="hdp_h_w_val")
-        hdp_a_w=st.number_input("AWAY ODDS",format="%.2f",key="hdp_a_w_val")
-        st.markdown('</div>',unsafe_allow_html=True)
-    with mc3:
-        st.markdown('<div class="gem-panel"><div class="gem-label">TOTAL GOALS (O/U)</div>',unsafe_allow_html=True)
-        ou_line=st.number_input("LINE",format="%.2f",step=0.25,key="ou_line_val")
-        ou_over_w=st.number_input("OVER",format="%.2f",key="ou_over_w_val")
-        ou_under_w=st.number_input("UNDER",format="%.2f",key="ou_under_w_val")
-        st.markdown('</div>',unsafe_allow_html=True)
-
-    st.markdown('<div class="gem-label">◈ SUPPLEMENTARY STATS (OPTIONAL)</div>',unsafe_allow_html=True)
-    match_stats=st.text_area("Paste H2H / form data...",height=70, label_visibility="collapsed")
-    st.markdown('<div style="height:6px"></div>',unsafe_allow_html=True)
-
-    if st.button("⚡  RUN ORACLE ANALYSIS",use_container_width=True,type="primary"):
-        ho,do_,ao=fix(h1x2),fix(d1x2),fix(a1x2)
-        hwo,awo,owo,uwo=fix(hdp_h_w),fix(hdp_a_w),fix(ou_over_w),fix(ou_under_w)
-        ph,pd_,pa=shin_devig(ho,do_,ao)
-        hw2,hw1,dex,aw1,aw2,pt=calc_dixon_coles_matrix(ph,pd_,pa,ou_line,owo,uwo,dc_rho)
-        fav_h=ph>=pa
-        evh=ev_ah(hdp_line,hw2,hw1,dex,aw1,aw2,hwo,fav_h)
-        eva=ev_ah(hdp_line,aw2,aw1,dex,hw1,hw2,awo,not fav_h)-(hdba_val/100)
-        evo=ev_ou(ou_line,pt,owo,True)
-        evu=ev_ou(ou_line,pt,uwo,False)
-
-        bah=max([{"n":"เจ้าบ้าน","ev":evh,"odds":hwo,"hdp":hdp_line},
-                 {"n":"ทีมเยือน","ev":eva,"odds":awo,"hdp":hdp_line}],key=lambda x:x['ev'])
-        bou=max([{"n":"สูง","ev":evo,"odds":owo,"hdp":ou_line},
-                 {"n":"ต่ำ","ev":evu,"odds":uwo,"hdp":ou_line}],key=lambda x:x['ev'])
-
-        st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-        st.markdown('<div class="gem-label">◈ PROBABILITY ENGINE</div>',unsafe_allow_html=True)
-        p1,p2,p3=st.columns(3)
-        p1.metric("HOME WIN",f"{ph*100:.1f}%")
-        p2.metric("DRAW",f"{pd_*100:.1f}%")
-        p3.metric("AWAY WIN",f"{pa*100:.1f}%")
-
-        st.markdown('<div class="gem-label" style="margin-top:14px;">◈ EV SCANNER</div>',unsafe_allow_html=True)
-        g1,g2=st.columns(2)
-        with g1:
-            st.markdown('<div class="gem-dim" style="margin-bottom:4px;">── HANDICAP ──</div>',unsafe_allow_html=True)
-            st.plotly_chart(ev_gauge(bah['ev'],f"TARGET: {bah['n']}",pre_ah_thr),use_container_width=True)
-        with g2:
-            st.markdown('<div class="gem-dim" style="margin-bottom:4px;">── TOTAL GOALS ──</div>',unsafe_allow_html=True)
-            st.plotly_chart(ev_gauge(bou['ev'],f"TARGET: {bou['n']}",pre_ou_thr),use_container_width=True)
-
-        if bah['ev']>=pre_ah_lim or bou['ev']>=pre_ou_lim:
-            tc=bah if bah['ev']>bou['ev'] else bou
-            if not api_key: st.warning("API Key required for Oracle")
-            else:
-                with st.spinner("◈ THE ORACLE PROCESSING..."):
-                    tf=None
-                    if tc['n']=="เจ้าบ้าน": tf=fav_h
-                    elif tc['n']=="ทีมเยือน": tf=not fav_h
-                    v=ai_engine(match_name,tc['n'],tc['ev'],tc['hdp'],tc['odds'],
-                                live=False,thr=pre_ah_lim,stats=match_stats,fav=tf)
-                    nev=tc['ev']+v.get('impact_score',0)
-
-                st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-                st.markdown('<div class="gem-label">◈ ORACLE VERDICT</div>',unsafe_allow_html=True)
-                vc1,vc2,vc3=st.columns(3)
-                vc1.metric("BASE EV",f"{tc['ev']*100:.2f}%")
-                vc2.metric("ORACLE ADJ",f"{v.get('impact_score',0)*100:.2f}%")
-                vc3.metric("NET EV",f"{nev*100:.2f}%")
-
-                with st.expander("◈ FULL ANALYSIS",expanded=True):
-                    stars=v.get('confidence_level',3)
-                    st.markdown(f'<div class="gem-label">CONFIDENCE: {"★"*stars}{"☆"*(5-stars)} ({stars}/5)</div>',unsafe_allow_html=True)
-                    st.success(f"**PROS:** {v.get('pros_analysis','—')}")
-                    st.error(f"**RISK:** {v.get('cons_analysis','—')}")
-                    st.info(f"**RULES:** {v.get('rule_triggered','None')}")
-
-                col_v="#00ff88" if v.get('final_decision',False) and nev>0 else "#ff3b5c"
-                label="◈ ORACLE APPROVED — EXECUTE" if v.get('final_decision',False) and nev>0 else "◈ ORACLE REJECTED — STAND DOWN"
-                st.markdown(f'<div class="gem-panel" style="border-top:2px solid {col_v};"><div class="gem-label" style="border-color:{col_v};color:{col_v};">{label}</div><p style="color:{col_v};font-family:\'Share Tech Mono\';font-size:0.82rem;">{v.get("final_comment","")}</p></div>',unsafe_allow_html=True)
-                if v.get('final_decision',False) and nev>0:
-                    st.balloons()
-                    inv=min((((tc['odds']-1)*((nev+1)/tc['odds'])-(1-((nev+1)/tc['odds'])))/(tc['odds']-1))*0.25,0.05)*total_bankroll
-                    tz_th=timezone(timedelta(hours=7))
-                    save_db([{"Time":datetime.now(tz_th).strftime("%Y-%m-%d %H:%M:%S"),"Match":match_name,
-                              "HDP":tc['hdp'],"Target":tc['n'],"EV_Pct":round(nev*100,2),
-                              "Investment":round(inv,2),"Odds":tc['odds'],"Closing_Odds":0.0,"Result":""}])
-        else:
-            st.markdown(f'<div class="gem-panel" style="border-top:2px solid #ffd600;"><div class="gem-label" style="border-color:#ffd600;color:#ffd600;">◈ BELOW THRESHOLD — NO SIGNAL</div><p class="gem-warn">AH {bah["ev"]*100:.2f}% (min {pre_ah_thr}%) | O/U {bou["ev"]*100:.2f}% (min {pre_ou_thr}%)</p></div>',unsafe_allow_html=True)
-
-# ╔══════════════╗
-# ║  TAB 2       ║
-# ╚══════════════╝
-with tab2:
-    tab2_logs=load_logs()
-    tz_th=timezone(timedelta(hours=7)); today_str=datetime.now(tz_th).strftime("%Y-%m-%d")
-
-    if not tab2_logs.empty:
-        st.markdown('<div class="gem-label">◈ POSITION LOG</div>',unsafe_allow_html=True)
-        ef1,_=st.columns([1,3])
-        with ef1: flt=st.selectbox("FILTER",["Today","Pending","All"])
-        df2=tab2_logs.copy()
-        if flt=="Today": df2=df2[df2['Time'].astype(str).str.contains(today_str,na=False)]
-        elif flt=="Pending": df2=df2[df2['Result'].astype(str).str.strip()==""]
-        df2=df2.sort_values('Time',ascending=False).reset_index(drop=True)
-        edf=st.data_editor(df2,column_config={"id":None,"Result":st.column_config.TextColumn("Result"),"Closing_Odds":st.column_config.NumberColumn("Closing Odds",min_value=0.0,format="%.2f")},use_container_width=True,num_rows="dynamic")
-        sb1,sb2=st.columns(2)
-        if sb1.button("💾  SYNC TO CLOUD",use_container_width=True,type="primary"):
-            with st.spinner("Syncing..."):
-                for _,row in edf.iterrows():
-                    supabase.table("investment_logs").update({"Closing_Odds":float(row['Closing_Odds']),"Result":str(row['Result'])}).eq("id",row['id']).execute()
-            st.toast("✓ Synced", icon="💾"); time.sleep(1); st.rerun()
-        if sb2.button("↺  REFRESH",use_container_width=True): st.rerun()
-
-        tab2_logs['Net_Profit']=tab2_logs.apply(calc_pnl,axis=1)
-        tab2_logs['CLV_Pct']=tab2_logs.apply(calc_clv,axis=1)
-
-        st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-        st.markdown('<div class="gem-label">◈ PERFORMANCE DASHBOARD</div>',unsafe_allow_html=True)
-        vf1,vf2=st.columns(2)
-        with vf1: tf2=st.radio("PERIOD",["All Time","Today"],horizontal=True)
-        with vf2: vm=st.radio("VIEW",["All","Pre-Match","In-Play"],horizontal=True)
-        tfl=tab2_logs[tab2_logs['Time'].astype(str).str.contains(today_str,na=False)].copy() if tf2=="Today" else tab2_logs.copy()
-        if vm=="In-Play": fl=tfl[tfl['Match'].str.contains(r'\[LIVE\]',na=False,case=False)]
-        elif vm=="Pre-Match": fl=tfl[~tfl['Match'].str.contains(r'\[LIVE\]',na=False,case=False)]
-        else: fl=tfl
-        il=fl[fl['Investment']>0]
-
-        # 🌟 คำนวณ Institutional Metrics (MDD & % Beating CLV)
-        max_drawdown = 0.0
-        mdd_pct = 0.0
-        if not fl.empty:
-            logs_dd = fl.sort_values(by='Time').copy()
-            logs_dd['Cum'] = logs_dd['Net_Profit'].cumsum()
-            running_max = logs_dd['Cum'].cummax()
-            drawdown = logs_dd['Cum'] - running_max
-            max_drawdown = drawdown.min()
-            if total_bankroll > 0: mdd_pct = (max_drawdown / total_bankroll) * 100
-
-        beating_clv_pct = 0.0
-        v_clv = il[il['Closing_Odds'] > 1.0]
-        if not v_clv.empty:
-            beating_count = len(v_clv[v_clv['CLV_Pct'] > 0])
-            beating_clv_pct = (beating_count / len(v_clv)) * 100
-
-        st.markdown('<div class="gem-label" style="margin-top:14px;">◈ PORTFOLIO OVERVIEW</div>',unsafe_allow_html=True)
-        m1,m2,m3,m4=st.columns(4)
-        m1.metric("NET PROFIT",f"฿{fl['Net_Profit'].sum():,.0f}")
-        m2.metric("DEPLOYED",f"฿{il['Investment'].sum():,.0f}")
-        m3.metric("WIN RATE",f"{(len(il[il['Net_Profit']>0])/len(il)*100 if not il.empty else 0):.1f}%")
-        m4.metric("ROI",f"{(fl['Net_Profit'].sum()/il['Investment'].sum()*100 if not il.empty and il['Investment'].sum()>0 else 0):.2f}%")
-
-        st.markdown('<div class="gem-label" style="margin-top:14px;">◈ INSTITUTIONAL METRICS</div>',unsafe_allow_html=True)
-        n1,n2,n3=st.columns(3)
-        n1.metric("MAX DRAWDOWN",f"฿{max_drawdown:,.0f}",f"{mdd_pct:.2f}% of Bankroll",delta_color="inverse")
-        n2.metric("AVG CLV",f"{v_clv['CLV_Pct'].mean():.2f}%" if not v_clv.empty else "—")
-        n3.metric("% BEATING CLV",f"{beating_clv_pct:.1f}%" if not v_clv.empty else "—")
-
-        if not fl.empty:
-            ls=fl.sort_values('Time').copy(); ls['Cum']=ls['Net_Profit'].cumsum()
-            lc='#ff8c00' if vm=="In-Play" else ('#00b4ff' if vm=="Pre-Match" else '#00ff88')
-            fill_c = 'rgba(255, 140, 0, 0.12)' if vm=="In-Play" else ('rgba(0, 180, 255, 0.12)' if vm=="Pre-Match" else 'rgba(0, 255, 136, 0.12)')
-            fig_e=go.Figure(go.Scatter(x=ls['Time'],y=ls['Cum'],mode='lines',fill='tozeroy',line=dict(color=lc,width=2),fillcolor=fill_c))
-            neon_layout(fig_e,f"EQUITY CURVE — {vm.upper()}")
-            st.plotly_chart(fig_e,use_container_width=True)
-
-            bc1,bc2=st.columns(2)
-            with bc1:
-                st.markdown('<div class="gem-dim" style="margin-bottom:4px;">P&L BY TARGET</div>',unsafe_allow_html=True)
-                tgt=ls.groupby('Target')['Net_Profit'].sum()
-                fig_t=go.Figure(go.Bar(x=tgt.index,y=tgt.values,marker_color=lc,marker_line_color='rgba(0,0,0,0)'))
-                neon_layout(fig_t); fig_t.update_layout(height=210,margin=dict(l=8,r=8,t=10,b=8))
-                st.plotly_chart(fig_t,use_container_width=True)
-            with bc2:
-                st.markdown('<div class="gem-dim" style="margin-bottom:4px;">WIN RATE BY ODDS BRACKET</div>',unsafe_allow_html=True)
-                ls['OB']=pd.cut(ls['Odds'],bins=[0,1.8,2.0,2.2,5.0],labels=['<1.80','1.80-2.00','2.00-2.20','>2.20'])
-                wr=(ls[ls['Net_Profit']>0].groupby('OB',observed=False).size()/ls.groupby('OB',observed=False).size()*100).fillna(0)
-                fig_w=go.Figure(go.Bar(x=wr.index.astype(str),y=wr.values,marker_color=lc,marker_line_color='rgba(0,0,0,0)'))
-                neon_layout(fig_w); fig_w.update_layout(height=210,margin=dict(l=8,r=8,t=10,b=8))
-                st.plotly_chart(fig_w,use_container_width=True)
-
-        # AI Learning
-        st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-        st.markdown('<div class="gem-label">◈ ORACLE LEARNING ENGINE</div>',unsafe_allow_html=True)
-        comp=tab2_logs[tab2_logs['Result'].astype(str).str.strip()!=""].copy() if 'Net_Profit' in tab2_logs.columns else pd.DataFrame()
-        if len(comp)>0:
-            lm=st.radio("LEARNING MODE",["🔴 Defensive (losses)","🟢 Offensive (wins)","⚪ Mixed"],horizontal=True)
-            if "🔴" in lm: tl=comp[comp['Net_Profit']<0].copy(); task="Post-Mortem: หาสาเหตุขาดทุน สร้าง Defensive Rules"; pfx="GEM_DEF_"
-            elif "🟢" in lm: tl=comp[comp['Net_Profit']>0].copy(); task="Success: หารูปแบบชนะ สร้าง Offensive Rules"; pfx="GEM_OFF_"
-            else: tl=comp.copy(); task="Mixed: สร้างกฎสมดุล"; pfx="GEM_MIX_"
-            if len(tl)>0:
-                st.info(f"◈ {len(tl)} records — tick to include in learning batch")
-                tl.insert(0,"Analyze",False)
-                sel=st.data_editor(tl[['Analyze','Time','Match','HDP','Target','Odds','Result','Net_Profit']],
-                    column_config={"Analyze":st.column_config.CheckboxColumn("✓",default=False),
-                                   "Net_Profit":st.column_config.NumberColumn("P&L",format="%.2f")},
-                    hide_index=True,use_container_width=True,key="debrief_editor")
-                picked=sel[sel['Analyze']==True]
-                if st.button("⚡  EXECUTE ORACLE LEARNING",use_container_width=True,type="primary"):
-                    if picked.empty: st.warning("Select at least one record")
-                    else:
-                        with st.spinner(f"Oracle learning..."):
-                            csv_s=picked[['Time','Match','HDP','Target','Odds','Result']].to_csv(index=False)
-                            try: rr=supabase.table("gem_knowledge").select("rule_id,category,rule_text").eq("is_active",True).execute(); rs="\n".join([f"[{r['rule_id']}] {r['rule_text']}" for r in (rr.data or [])])
-                            except: rs=""
-                            pd_=f"CRO task: {task}\nCases:\n{csv_s}\nCurrent rules:\n{rs}\nLabel category [AH]/[OU]/[ALL]\nJSON: {{\"analysis_summary\":\"\",\"new_rules_to_add\":[{{\"rule_text\":\"\",\"category\":\"\"}}]}}"
-                            try:
-                                if not api_key: st.error("API Key missing")
-                                else:
-                                    m=genai.GenerativeModel('models/gemma-4-31b-it')
-                                    d=safe_json_loads(m.generate_content(pd_).text)
-                                    if d:
-                                        st.success("✓ Learning complete")
-                                        st.info(f"**Analysis:** {d.get('analysis_summary','—')}")
-                                        nr=d.get("new_rules_to_add",[])
-                                        if nr:
-                                            pl=[]; bid=datetime.now(timezone(timedelta(hours=7))).strftime("%Y%m%d_%H%M")
-                                            st.markdown('<div class="gem-label">◈ NEW RULES</div>',unsafe_allow_html=True)
-                                            for i,rule in enumerate(nr):
-                                                rid=f"{pfx}{bid}_{i+1}"; pl.append({"rule_id":rid,"rule_text":rule.get("rule_text",""),"category":rule.get("category","AI")})
-                                                c2="#ff3b5c" if "DEF" in pfx else ("#00ff88" if "OFF" in pfx else "#ffd600")
-                                                st.markdown(f'<div class="gem-panel" style="border-top:2px solid {c2};"><span style="font-family:\'Share Tech Mono\';font-size:0.68rem;color:{c2};">[{rid}]</span><br><span style="color:#c8e6d4;">{rule.get("rule_text","")}</span></div>',unsafe_allow_html=True)
-                                            supabase.table("gem_knowledge").insert(pl).execute()
-                                            load_gem_rules.clear()
-                                            st.balloons(); st.success("✓ Rules synced to Cloud")
-                            except Exception as e: st.error(str(e))
-            else: st.info("No records in this category")
-        else: st.info("◈ No settled results to analyse")
-
-# ╔══════════════╗
-# ║  TAB 3       ║
-# ╚══════════════╝
-with tab3:
-    st.markdown('<div class="gem-label">◈ LIVE SNIPER COMMAND CENTER</div>',unsafe_allow_html=True)
-    with st.expander("📷 AI LIVE VISION — Multi-image scan"):
-        if not api_key: st.markdown('<p class="gem-warn">▸ API Key required</p>',unsafe_allow_html=True)
-        else:
-            limgs=st.file_uploader("Upload live screenshots",type=['png','jpg'],accept_multiple_files=True)
-            if limgs and st.button("⚡ EXTRACT LIVE DATA",use_container_width=True):
-                with st.spinner("Scanning..."):
-                    try:
-                        imgs=[Image.open(f) for f in limgs]
-                        model=genai.GenerativeModel('models/gemma-4-31b-it')
-                        
-                        # 🌟 อัปเกรด PROMPT สกัดข้อมูล Live แบบสมบูรณ์ (เพิ่มชื่อทีมและเน้นตำแหน่งสกอร์)
-                        pl='''คุณคือ AI Quant Analyst สกัดข้อมูลฟุตบอล LIVE สด จากภาพให้ออกมาเป็น JSON เท่านั้น อิงจากโครงสร้างดังนี้:
-1. ข้อมูลทั่วไป:
-   - match_name: ชื่อทีมเหย้า (แถวบน) + " VS " + ชื่อทีมเยือน (แถวล่าง)
-2. เวลา, สกอร์ และ ใบแดง:
-   - current_min: ตัวเลขเวลาที่กำลังแข่ง (เช่น 27:06 ให้ตอบ 27)
-   - current_score_h: สกอร์ทีมเหย้า (ตัวเลขที่อยู่ติดกับชื่อทีมแถวบน)
-   - current_score_a: สกอร์ทีมเยือน (ตัวเลขที่อยู่ติดกับชื่อทีมแถวล่าง)
-   - rc_h: true หากมีสัญลักษณ์ "ใบแดง" หลังชื่อทีมเหย้า
-   - rc_a: true หากมีสัญลักษณ์ "ใบแดง" หลังชื่อทีมเยือน
-3. คอลัมน์ 'แฮนดิแคป' (ซ้ายสุด):
-   - live_hdp: เรตปัจจุบัน (ต้องแปลงเป็นทศนิยม เช่น 0/0.5 ตอบ 0.25, 0.5/1 ตอบ 0.75, 1/1.5 ตอบ 1.25)
-   - live_hdp_h: ค่าน้ำทีมแถวบน
-   - live_hdp_a: ค่าน้ำทีมแถวล่าง
-4. คอลัมน์ 'สูง/ต่ำ' (กลาง):
-   - live_ou: เรตสกอร์รวม (ต้องแปลงเป็นทศนิยม เช่น 3.5/4 ตอบ 3.75, 2.5/3 ตอบ 2.75)
-   - live_ou_over: ค่าน้ำใต้คำว่า 'สูง'
-   - live_ou_under: ค่าน้ำใต้คำว่า 'ต่ำ'
-
-ตอบกลับเป็น JSON ก้อนเดียวเท่านั้น ห้ามมีข้อความอื่น:
-{"match_name":"","current_min":0,"current_score_h":0,"current_score_a":0,"rc_h":false,"rc_a":false,"live_hdp":0.0,"live_hdp_h":0.0,"live_hdp_a":0.0,"live_ou":0.0,"live_ou_over":0.0,"live_ou_under":0.0}'''
-                        
-                        d=safe_json_loads(model.generate_content([pl]+imgs).text)
-                        
-                        # 🌟 ระบบตะแกรงกรองข้อมูลและแมป Widget Key ให้ตรงช่อง (Safeguard)
-                        for k, v in d.items():
-                            if k == 'match_name':
-                                st.session_state['match_name_live'] = str(v)
-                            elif k == 'current_score_h':
-                                try: st.session_state['lh_s_input'] = int(v)
-                                except ValueError: pass
-                            elif k == 'current_score_a':
-                                try: st.session_state['la_s_input'] = int(v)
-                                except ValueError: pass
-                            elif k == 'rc_h':
-                                st.session_state['rc_h_chk'] = bool(v)
-                            elif k == 'rc_a':
-                                st.session_state['rc_a_chk'] = bool(v)
-                            elif k == 'current_min':
-                                try: st.session_state['current_min'] = int(v)
-                                except ValueError: pass
-                            else: 
-                                try: st.session_state[k] = float(v)
-                                except ValueError: st.session_state[k] = 0.0
-                                
-                        st.toast("✅ สกัดเป้าหมาย Live ชัดเจน 100%!", icon="🎯")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e: st.error(f"⚠️ พลาด: {e}")
-
-    st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
+if page == "📝 แจ้งซ่อม (User)":
+    st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
+    tab1, tab2 = st.tabs(["🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
     
-    # 🌟 เพิ่มช่องบันทึกชื่อทีม (ดึงค่าจาก AI หรือหน้า Pre-Match มาเป็นค่าเริ่มต้น)
-    default_live_mn = st.session_state.get('match_name_live', st.session_state.get('match_name',''))
-    live_mn = st.text_input("MATCH (Live)", value=default_live_mn, key="match_name_live_input")
-
-    gl1,gl2=st.columns(2)
-    with gl1:
-        st.markdown('<div class="gem-label">◈ LIVE MATCH STATE</div>',unsafe_allow_html=True)
-        s1,s2=st.columns(2)
-        csh=s1.number_input("HOME SCORE",min_value=0,value=st.session_state.get('lh_s_input',0),key="lh_s_input")
-        rch=s2.checkbox("🟥 HOME RED",value=st.session_state.get('rc_h_chk',False),key="rc_h_chk")
-        s3,s4=st.columns(2)
-        csa=s3.number_input("AWAY SCORE",min_value=0,value=st.session_state.get('la_s_input',0),key="la_s_input")
-        rca=s4.checkbox("🟥 AWAY RED",value=st.session_state.get('rc_a_chk',False),key="rc_a_chk")
-        cmin=st.slider("MINUTE",0,120,st.session_state.get('current_min',45))
-    with gl2:
-        st.markdown('<div class="gem-label">◈ PRE-MATCH REFERENCE</div>',unsafe_allow_html=True)
-        preh=st.number_input("HOME (open)",value=st.session_state.get('pre_h',2.0),format="%.2f",key="pre_h")
-        pred=st.number_input("DRAW (open)",value=st.session_state.get('pre_d',3.0),format="%.2f",key="pre_d")
-        prea=st.number_input("AWAY (open)",value=st.session_state.get('pre_a',3.0),format="%.2f",key="pre_a")
-        preou=st.number_input("O/U (open)",value=st.session_state.get('pre_ou',2.5),format="%.2f",step=0.25,key="pre_ou")
-
-    st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-    st.markdown('<div class="gem-label">◈ LIVE MARKET FEED</div>',unsafe_allow_html=True)
-    lm1,lm2=st.columns(2)
-    with lm1:
-        st.markdown('<div class="gem-dim" style="margin-bottom:4px;">── HANDICAP ──</div>',unsafe_allow_html=True)
-        bh1,bh2,bh3=st.columns([1,2,1])
-        bh1.button("◀ -0.25",key="h_sub",on_click=adj_hdp,args=(-0.25,))
-        lhdp=bh2.number_input("HDP",value=st.session_state['live_hdp'],step=0.25,key="live_hdp",label_visibility="collapsed",format="%.2f")
-        bh3.button("▶ +0.25",key="h_add",on_click=adj_hdp,args=(0.25,))
-        hw1,hw2_=st.columns(2)
-        lhdph=hw1.number_input("HOME",value=st.session_state.get('live_hdp_h',0.9),format="%.2f",key="live_hdp_h")
-        lhdpa=hw2_.number_input("AWAY",value=st.session_state.get('live_hdp_a',0.9),format="%.2f",key="live_hdp_a")
-    with lm2:
-        st.markdown('<div class="gem-dim" style="margin-bottom:4px;">── TOTAL GOALS ──</div>',unsafe_allow_html=True)
-        bo1,bo2,bo3=st.columns([1,2,1])
-        bo1.button("◀ -0.25",key="o_sub",on_click=adj_ou,args=(-0.25,))
-        lou=bo2.number_input("O/U",value=st.session_state['live_ou'],step=0.25,key="live_ou",label_visibility="collapsed",format="%.2f")
-        bo3.button("▶ +0.25",key="o_add",on_click=adj_ou,args=(0.25,))
-        ow1,ow2=st.columns(2)
-        louov=ow1.number_input("OVER",value=st.session_state.get('live_ou_over',0.9),format="%.2f",key="live_ou_over")
-        louun=ow2.number_input("UNDER",value=st.session_state.get('live_ou_under',0.9),format="%.2f",key="live_ou_under")
-
-    ac1,ac2=st.columns([4,1])
-    snap=ac1.button("⚡  ENGAGE SNIPER",use_container_width=True,type="primary")
-    ac2.button("↺ RESET",use_container_width=True,on_click=clear_inplay_data)
-
-    if snap:
-        lph,lpd,lpa=shin_devig(fix(preh),fix(pred),fix(prea))
-        ml=max(90-cmin,1)
-        hw2l,hw1l,dexl,aw1l,aw2l,ptl=calc_dixon_coles_matrix(lph,lpd,lpa,lou,fix(louov),fix(louun),dc_rho,csh,csa,ml,rch,rca)
-        fvl=lph>=lpa
-        evhl=ev_ah(lhdp,hw2l,hw1l,dexl,aw1l,aw2l,fix(lhdph),fvl)
-        eval_=ev_ah(lhdp,aw2l,aw1l,dexl,hw1l,hw2l,fix(lhdpa),not fvl)-(hdba_val/100)
-        evol=ev_ou(lou,ptl,fix(louov),True)
-        evul=ev_ou(lou,ptl,fix(louun),False)
-        bav=max(evhl,eval_); tah="เจ้าบ้าน" if evhl>eval_ else "ทีมเยือน"
-        bov=max(evol,evul); tou="สูง" if evol>evul else "ต่ำ"
-
-        st.markdown('<div class="gem-divider"></div>',unsafe_allow_html=True)
-        gg1,gg2=st.columns(2)
-        with gg1: st.plotly_chart(ev_gauge(bav,f"AH: {tah}",live_ah_thr),use_container_width=True)
-        with gg2: st.plotly_chart(ev_gauge(bov,f"O/U: {tou}",live_ou_thr),use_container_width=True)
-
-        if bav>=live_ah_lim or bov>=live_ou_lim:
-            tl2=({"n":tah,"ev":bav,"hdp":lhdp,"odds":fix(lhdph) if tah=="เจ้าบ้าน" else fix(lhdpa)}
-                 if bav>bov else
-                 {"n":tou,"ev":bov,"hdp":lou,"odds":fix(louov) if tou=="สูง" else fix(louun)})
-            if not api_key: st.warning("API Key required")
-            else:
-                with st.spinner("◈ SNIPER ORACLE..."):
-                    tf2=None
-                    if tl2['n']=="เจ้าบ้าน": tf2=fvl
-                    elif tl2['n']=="ทีมเยือน": tf2=not fvl
-                    
-                    al=ai_engine(live_mn,tl2['n'],tl2['ev'],tl2['hdp'],tl2['odds'],True,cmin,f"{csh}-{csa}",thr=live_ah_lim,fav=tf2)
-                    nlev=tl2['ev']+al.get('impact_score',0)
-                lc1,lc2,lc3=st.columns(3)
-                lc1.metric("LIVE EV",f"{tl2['ev']*100:.2f}%")
-                lc2.metric("ORACLE ADJ",f"{al.get('impact_score',0)*100:.2f}%")
-                lc3.metric("NET EV",f"{nlev*100:.2f}%")
-                with st.expander("◈ LIVE ANALYSIS",expanded=True):
-                    st.success(f"**PROS:** {al.get('pros_analysis','—')}")
-                    st.error(f"**RISK:** {al.get('cons_analysis','—')}")
-                    st.info(f"**RULES:** {al.get('rule_triggered','None')}")
-                lim=live_ah_lim if tl2['n'] in ["เจ้าบ้าน","ทีมเยือน"] else live_ou_lim
-                if al.get('final_decision',False) and nlev>=lim:
-                    st.balloons()
-                    st.markdown(f'<div class="gem-panel" style="border-top:2px solid #ff3b5c;border-left:2px solid #ff3b5c;"><div class="gem-label" style="border-color:#ff3b5c;color:#ff3b5c;">◈ SNIPER APPROVED — TARGET LOCKED</div><p style="color:#ff3b5c;font-family:\'Share Tech Mono\';">TARGET: {tl2["n"]} | NET EV: {nlev*100:.2f}%</p><p style="color:#c8e6d4;">{al.get("final_comment","")}</p></div>',unsafe_allow_html=True)
-                    inv=min((((tl2['odds']-1)*((nlev+1)/tl2['odds'])-(1-((nlev+1)/tl2['odds'])))/(tl2['odds']-1))*0.25,0.05)*total_bankroll
-                    tz2=timezone(timedelta(hours=7))
-                    
-                    # 🌟 บันทึกชื่อทีมพร้อมประทับเวลานาทีแข่งขัน (Auto-Timestamp Minute)
-                    save_db([{"Time":datetime.now(tz2).strftime("%Y-%m-%d %H:%M:%S"),
-                              "Match":f"[LIVE {cmin}'] {live_mn if live_mn else 'Live Match'}",
-                              "HDP":tl2['hdp'],"Target":tl2['n'],"EV_Pct":round(nlev*100,2),
-                              "Investment":round(inv,2),"Odds":tl2['odds'],"Closing_Odds":0.0,"Result":""}])
-                    st.toast("✅ SNIPER DEPLOYED: บันทึกข้อมูลแล้ว", icon="🚀")
+    with tab1:
+        with st.form("ticket_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                user_name = st.text_input("ชื่อผู้แจ้ง")
+                dept_choice = st.selectbox("แผนก", depts)
+                if dept_choice == "Other":
+                    department = st.text_input("กรุณาระบุแผนกของคุณ")
                 else:
-                    st.markdown(f'<div class="gem-panel" style="border-top:2px solid #ffd600;"><div class="gem-label" style="border-color:#ffd600;color:#ffd600;">◈ ORACLE STAND DOWN</div><p class="gem-warn">{al.get("final_comment","")}</p></div>',unsafe_allow_html=True)
+                    department = dept_choice
+                
+                category = st.selectbox("ประเภทงานซ่อม (Category)", ["Hardware", "Software", "Network", "Other"])
+                eq_type = st.selectbox("ประเภทอุปกรณ์ (Equipment Type)", [
+                    "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
+                    "IPDS Printer", "TV", "CCTV", "IPad", "Other"
+                ])
+            with c2:
+                asset_id_input = st.text_input("รหัสอุปกรณ์ (Asset ID)") 
+                loc_input = st.text_input("สถานที่ตั้งอุปกรณ์ (เช่น KD2 / เสา 4B / Mini office QC)") 
+                urgency = st.selectbox("ระดับความเร่งด่วน", ["ปกติ", "ด่วน", "ด่วนมาก"])
+                uploaded_file = st.file_uploader("แนบรูปภาพประกอบ", type=['png', 'jpg', 'jpeg'])
+            
+            description = st.text_area("รายละเอียดปัญหา")
+            submitted = st.form_submit_button("ส่งเรื่องแจ้งซ่อม")
+            
+            if submitted:
+                # =========================================================
+                # แก้ไขข้อ 2: สร้าง Ticket ID ด้วย UUID แทนการนับ len()
+                # ป้องกัน Race Condition กรณีมีผู้ใช้หลายคน Submit พร้อมกัน
+                # รูปแบบ: JOB-XXXXXXXX (8 ตัวอักขระแรกของ UUID)
+                # =========================================================
+                ticket_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
+                
+                image_data = ""
+                if uploaded_file:
+                    encoded_img = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    image_data = f"data:{uploaded_file.type};base64,{encoded_img}"
+
+                # =========================================================
+                # แก้ไขข้อ 2 (เพิ่มเติม): Validate กรณีเลือก "Other" แผนก
+                # ถ้าไม่กรอกชื่อแผนกจะแจ้งเตือนแทนที่จะบันทึก "Other" เฉย ๆ
+                # =========================================================
+                if dept_choice == "Other" and not department.strip():
+                    st.error("❌ กรุณาระบุชื่อแผนกของคุณในช่อง 'กรุณาระบุแผนกของคุณ'")
+                elif user_name and description and department.strip():
+                    insert_data("tickets", {
+                        "id": ticket_id, 
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                        "user": user_name, 
+                        "dept": department.strip(), 
+                        "category": category, 
+                        "equipment_type": eq_type,
+                        "desc": description, 
+                        "status": "รอตรวจสอบ", 
+                        "urgency": urgency, 
+                        "image_path": image_data, 
+                        "asset_id": asset_id_input,
+                        "location": loc_input
+                    })
+                    st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
+                    st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
+                else: 
+                    st.error("❌ กรุณาระบุชื่อผู้แจ้ง, แผนก และรายละเอียดปัญหา")
+
+        st.divider()
+        st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
+        df_tickets = load_table("tickets")
+        if not df_tickets.empty:
+            df_view = df_tickets[['id', 'date', 'user', 'category', 'urgency', 'status', 'rating']].copy()
+            sort_map = {'รอตรวจสอบ': 1, 'ดำเนินการ': 2, 'ส่งซ่อม': 3, 'สำเร็จ': 4}
+            df_view['sort'] = df_view['status'].map(sort_map)
+            df_view = df_view.sort_values(by=['sort', 'date'], ascending=[True, False]).drop('sort', axis=1)
+            df_view.rename(columns={'id':'รหัสงาน', 'date':'วันที่แจ้ง', 'user':'ผู้แจ้ง', 'category':'ประเภท', 'urgency':'ความเร่งด่วน', 'status':'สถานะ', 'rating':'คะแนนเฉลี่ย'}, inplace=True)
+            df_view['คะแนนเฉลี่ย'] = df_view['คะแนนเฉลี่ย'].apply(lambda x: "⭐" * int(round(float(x))) if pd.notna(x) else "รอประเมิน")
+            def color_status(val):
+                if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828'
+                elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17'
+                elif val == 'สำเร็จ': return 'background-color: #e8f5e9; color: #2e7d32'
+                return ''
+            st.dataframe(df_view.style.map(color_status, subset=['สถานะ']), use_container_width=True, hide_index=True)
+
+    with tab2:
+        st.subheader("งานซ่อมที่รอการประเมิน")
+        df_all = load_table("tickets")
+        if not df_all.empty:
+            ready_to_rate = df_all[(df_all['status'] == 'สำเร็จ') & (df_all['q1'].isna())]
+            if not ready_to_rate.empty:
+                selected_job = st.selectbox("เลือกงานซ่อมที่คุณต้องการประเมิน", ready_to_rate['id'].tolist())
+                with st.form("detailed_csat_form"):
+                    q1 = st.radio("1. ความพอใจการสนับสนุนจากทีมงาน?", scale_options, horizontal=True)
+                    q2 = st.radio("2. คุณภาพการบริการ HW/SW?", scale_options, horizontal=True)
+                    q3 = st.radio("3. ความมืออาชีพของทีมงาน?", scale_options, horizontal=True)
+                    q4 = st.radio("4. การบริการที่ตรงต่อเวลา?", scale_options, horizontal=True)
+                    q5 = st.radio("5. ความพึงพอใจในภาพรวม?", scale_options, horizontal=True)
+                    fback = st.text_area("ข้อเสนอแนะเพิ่มเติม")
+                    if st.form_submit_button("บันทึกการประเมิน"):
+                        update_csat_full(selected_job, rating_scale[q1], rating_scale[q2], rating_scale[q3], rating_scale[q4], rating_scale[q5], fback)
+                        st.success("ขอบคุณสำหรับคะแนนครับ!")
+                        st.rerun()
+            else: st.info("ไม่มีงานซ่อมที่รอการประเมิน")
+
+# ==========================================
+# หน้าที่ 2: จัดการงานซ่อม (ช่าง)
+# ==========================================
+elif page == "💻 จัดการงานซ่อม (ช่าง)" and st.session_state.is_admin:
+    st.header("💻 จัดการงานซ่อม (เฉพาะงานที่รอดำเนินการ)")
+    df_tickets = load_table("tickets")
+    
+    if not df_tickets.empty:
+        df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
+        
+        if not df_pending.empty:
+            view_cols = ['id', 'date', 'user', 'dept', 'category', 'status']
+            rename_dict = {'id': 'รหัสงาน', 'date': 'วันที่แจ้ง', 'user': 'ผู้แจ้ง', 'dept': 'แผนก', 'category': 'ประเภท', 'status': 'สถานะ'}
+            
+            if 'location' in df_pending.columns:
+                view_cols.insert(4, 'location')
+                rename_dict['location'] = 'สถานที่ตั้ง'
+            
+            df_manage_view = df_pending[view_cols].copy()
+            df_manage_view.rename(columns=rename_dict, inplace=True)
+
+            def color_status(val):
+                if val == 'รอตรวจสอบ': return 'background-color: #ffebee; color: #c62828; font-weight: bold'
+                elif val == 'ดำเนินการ': return 'background-color: #fff8e1; color: #f57f17; font-weight: bold'
+                elif val == 'ส่งซ่อม': return 'background-color: #f3e5f5; color: #6a1b9a; font-weight: bold'
+                return ''
+
+            st.dataframe(df_manage_view.style.map(color_status, subset=['สถานะ']), use_container_width=True, hide_index=True)
+            
+            st.divider()
+            
+            st.subheader("🔧 อัปเดตรายละเอียดและปิดงาน")
+            selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
+            tk = df_pending[df_pending['id'] == selected_id].iloc[0]
+            
+            # =========================================================
+            # แก้ไขข้อ 4: ดึงรูปภาพเพียงครั้งเดียว แล้วเก็บใน img_path
+            # ใช้ตัวแปรเดียวกันทั้งสำหรับปุ่มดาวน์โหลด PDF และแสดงในฟอร์ม
+            # (เดิมดึง 2 ครั้ง: ก่อนฟอร์ม 1 รอบ และในฟอร์มอีก 1 รอบ)
+            # =========================================================
+            try:
+                img_res = supabase.table("tickets").select("image_path").eq("id", selected_id).execute()
+                img_path = img_res.data[0].get('image_path', '') if img_res.data else ''
+            except Exception:
+                img_path = ''
+
+            # ปุ่มดาวน์โหลด PDF — ใช้ img_path ที่ดึงมาแล้วด้านบน
+            pdf_bytes = generate_repair_pdf(tk, img_path)
+            st.download_button(
+                label="📥 ดาวน์โหลดใบงานซ่อม (PDF)",
+                data=pdf_bytes,
+                file_name=f"Service_Report_{selected_id}.pdf",
+                mime="application/pdf"
+            )
+            
+            with st.form("edit_job_form"):
+                c1, c2 = st.columns(2)
+                
+                with c1:
+                    st.info(f"**📍 สถานที่ตั้ง:** {tk.get('location', 'ไม่ได้ระบุ')}")
+                    st.info(f"**อาการที่แจ้ง:** {tk.get('desc', '')}")
+                    st.info(f"**ประเภทอุปกรณ์:** {tk.get('equipment_type', 'ไม่ได้ระบุ')}")
+                    st.info(f"**ประเภทงาน:** {tk.get('category', '')}")
+                    
+                    # แสดงรูปภาพจาก img_path ที่ดึงมาแล้วครั้งเดียว (ไม่ดึงซ้ำ)
+                    if img_path and str(img_path).startswith('data:image'):
+                        try: st.image(img_path, caption="รูปประกอบ", width=400)
+                        except: st.error("ไม่สามารถแสดงรูปภาพได้")
+                    
+                    n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
+                    assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
+                
+                with c2:
+                    root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') or "")
+                    sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') or "")
+                    cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost') or 0.0))
+                
+                submitted = st.form_submit_button("บันทึกข้อมูลงานซ่อม")
+                if submitted:
+                    update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
+                    st.toast(f"บันทึกงาน {selected_id} สำเร็จ!", icon="✅")
+                    st.success("อัปเดตสถานะเรียบร้อยแล้ว")
+                    st.rerun()
         else:
-            st.markdown(f'<div class="gem-panel" style="border-top:2px solid #0f2535;"><div class="gem-label">◈ WITHIN NORMAL RANGE</div><p class="gem-dim">AH {bav*100:.2f}% (min {live_ah_thr}%) | O/U {bov*100:.2f}% (min {live_ou_thr}%)</p></div>',unsafe_allow_html=True)
+            st.success("🎉 ยอดเยี่ยม! ขณะนี้ไม่มีงานซ่อมค้างในระบบ")
+    else:
+        st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
-# ╔══════════════╗
-# ║  TAB 4       ║
-# ╚══════════════╝
-with tab4:
-    st.markdown('<div class="gem-label">◈ BRIER SCORE ACCURACY ENGINE</div>',unsafe_allow_html=True)
-    st.markdown('<p style="font-family:\'Rajdhani\';font-size:0.85rem;color:#4a7a60;">Compares GEM estimates vs bookmaker implied probabilities. Lower Brier Score = More Accurate.</p>',unsafe_allow_html=True)
-    t4l=load_logs()
-    if t4l is not None and not t4l.empty:
-        t4l['Net_Profit']=t4l.apply(calc_pnl,axis=1)
-        fin=t4l[t4l['Result'].astype(str).str.strip()!=""].copy()
-        if not fin.empty:
-            def score_row(row):
+# ==========================================
+# หน้าที่ 3: Dashboard
+# ==========================================
+elif page == "📊 Dashboard" and st.session_state.is_admin:
+    st.title("📈 IT Performance Overview")
+    df = load_table("tickets")
+    
+    if not df.empty:
+        df['date_dt'] = pd.to_datetime(df['date'])
+        df['month_year'] = df['date_dt'].dt.strftime('%m-%Y')
+        selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดู", ["ทั้งหมด"] + sorted(df['month_year'].unique(), reverse=True))
+        
+        if selected_month != "ทั้งหมด":
+            df_filtered = df[df['month_year'] == selected_month].copy()
+            st.info(f"🔎 แสดงข้อมูลเฉพาะเดือน: **{selected_month}**")
+        else:
+            df_filtered = df.copy()
+            st.info("🔎 แสดงข้อมูลภาพรวมทั้งหมด")
+        
+        m1, m2, m3, m4 = st.columns(4)
+        with m1: st.metric("งานแจ้งซ่อม", len(df_filtered))
+        with m2:
+            resolved = len(df_filtered[df_filtered['status'] == 'สำเร็จ'])
+            success_rate = (resolved/len(df_filtered)*100) if len(df_filtered) > 0 else 0
+            st.metric("ปิดงานสำเร็จ", f"{resolved} งาน", f"{success_rate:.1f}%")
+        with m3:
+            avg_csat = df_filtered['rating'].mean()
+            st.metric("คะแนนเฉลี่ย", f"{avg_csat:.2f} ⭐" if not pd.isna(avg_csat) else "0.00 ⭐")
+        with m4:
+            pending = len(df_filtered[df_filtered['status'] == 'รอตรวจสอบ'])
+            st.metric("งานค้าง", pending, delta=f"{pending} งาน", delta_color="inverse")
+
+        st.markdown("---")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("🏢 ปริมาณงานแยกตามแผนก")
+            if not df_filtered.empty: st.bar_chart(df_filtered['dept'].value_counts(), color="#0046ad")
+        with c2:
+            st.subheader("🛠️ ประเภทปัญหาที่พบบ่อย")
+            if not df_filtered.empty: st.bar_chart(df_filtered['category'].value_counts(), color="#ff4b4b")
+
+        st.divider()
+
+        with st.expander("📊 รายละเอียดคะแนนประเมิน (CSAT)", expanded=True):
+            def to_percent(val):
+                return f"{(val / 5 * 100):.1f}%" if pd.notna(val) else "0.0%"
+            
+            csat_stats = pd.DataFrame({
+                "หัวข้อการประเมิน": [
+                    "1. การสนับสนุนจากทีมงาน", 
+                    "2. คุณภาพการบริการ HW/SW", 
+                    "3. ความเป็นมืออาชีพ", 
+                    "4. ความตรงต่อเวลา", 
+                    "5. ความพึงพอใจในภาพรวม"
+                ],
+                "คะแนนความพึงพอใจ (%)": [
+                    to_percent(df_filtered['q1'].mean()), 
+                    to_percent(df_filtered['q2'].mean()), 
+                    to_percent(df_filtered['q3'].mean()), 
+                    to_percent(df_filtered['q4'].mean()), 
+                    to_percent(df_filtered['q5'].mean())
+                ]
+            })
+            csat_stats.set_index("หัวข้อการประเมิน", inplace=True)
+            st.table(csat_stats)
+
+        st.subheader("💬 ข้อเสนอแนะล่าสุด")
+        if 'feedback' in df_filtered.columns:
+            feedback_list = df_filtered[(df_filtered['feedback'].notna()) & (df_filtered['feedback'].str.strip() != "")][['date', 'user', 'rating', 'feedback']].sort_values(by='date', ascending=False)
+            if not feedback_list.empty:
+                feedback_list.rename(columns={'date': 'วันที่', 'user': 'ผู้แจ้ง', 'rating': 'คะแนน', 'feedback': 'ความคิดเห็น'}, inplace=True)
+                st.dataframe(feedback_list, use_container_width=True, hide_index=True)
+            else: st.write("ไม่มีข้อเสนอแนะเพิ่มเติม")
+            
+        st.divider()
+        st.subheader("🔧 สรุปผลการบำรุงรักษา (PM Coverage)")
+        df_pm_all = load_table("pm_schedules")
+        
+        if not df_pm_all.empty:
+            df_pm_all['date_dt'] = pd.to_datetime(df_pm_all['next_due_date'])
+            df_pm_all['month_year'] = df_pm_all['date_dt'].dt.strftime('%m-%Y')
+            
+            pm_filtered = df_pm_all[df_pm_all['month_year'] == selected_month] if selected_month != "ทั้งหมด" else df_pm_all
+            
+            if not pm_filtered.empty:
+                total_pm = len(pm_filtered)
+                done_pm = len(pm_filtered[pm_filtered['status'] == 'Completed'])
+                pending_pm = total_pm - done_pm
+                
+                p_done = (done_pm / total_pm) * 100 if total_pm > 0 else 0
+                p_pending = (pending_pm / total_pm) * 100 if total_pm > 0 else 0
+                
+                cp1, cp2, cp3 = st.columns(3)
+                cp1.metric("แผน PM ทั้งหมด", f"{total_pm} รายการ")
+                cp2.metric("ดำเนินการแล้ว (%)", f"{p_done:.1f}%", delta=f"{done_pm} งาน")
+                cp3.metric("รอดำเนินการ (%)", f"{p_pending:.1f}%", delta=f"-{pending_pm} งาน", delta_color="inverse")
+                
+                pm_chart_data = pd.DataFrame({
+                    'สถานะ': ['เสร็จสิ้น', 'ค้างดำเนินการ'],
+                    'จำนวน': [done_pm, pending_pm]
+                })
+                st.bar_chart(pm_chart_data.set_index('สถานะ'))
+            else:
+                st.write("ไม่มีแผนงาน PM ในเดือนนี้")
+        else:
+            st.info("ยังไม่มีการสร้างแผนงานบำรุงรักษา (PM) ในระบบ")
+
+    else:
+        st.warning("⚠️ ยังไม่มีข้อมูลงานแจ้งซ่อมในฐานข้อมูล")
+
+# ==========================================
+# หน้าที่ 4: Assets
+# ==========================================
+elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session_state.is_admin:
+    st.title("🗄️ IT Asset Management")
+    
+    with st.expander("➕ ลงทะเบียนอุปกรณ์ใหม่"):
+        with st.form("new_asset_form"):
+            a1, a2 = st.columns(2)
+            with a1:
+                aid = st.text_input("รหัสอุปกรณ์ (Asset ID)*")
+                awarranty = st.date_input("วันที่หมดประกัน")
+                aloc = st.text_input("สถานที่ตั้ง (Location)")
+            with a2:
+                amod = st.text_input("ยี่ห้อ/รุ่น")
+                adept = st.selectbox("แผนกที่ใช้งาน", depts)
+                auser = st.text_input("ผู้ถือครอง/ผู้รับผิดชอบ (Assigned User)")
+                
+            if st.form_submit_button("บันทึกทะเบียน"):
+                if aid:
+                    insert_data("assets", {
+                        "id": aid, "model": amod, "dept": adept, 
+                        "warranty_expire": str(awarranty), 
+                        "location": aloc, "assigned_user": auser, 
+                        "status": "Active"
+                    })
+                    st.success(f"ลงทะเบียน {aid} สำเร็จ"); st.rerun()
+                else: st.error("กรุณาระบุรหัสอุปกรณ์")
+
+    df_a = load_table("assets")
+    df_t = load_table("tickets")
+    st.divider()
+    search_query = st.text_input("🔍 ตรวจสอบประวัติเครื่องรายอุปกรณ์", placeholder="พิมพ์ Asset ID...")
+    
+    if search_query and not df_a.empty:
+        match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
+        if not match.empty:
+            target_asset = match.iloc[0]
+            today = datetime.now().date()
+            w_date_str = target_asset.get('warranty_expire')
+            
+            if w_date_str and pd.notna(w_date_str):
+                w_date = pd.to_datetime(w_date_str).date()
+                if w_date < today:
+                    w_status = "🔴 **หมดอายุการรับประกัน**"
+                else:
+                    days_left = (w_date - today).days
+                    w_status = f"🟢 **อยู่ในประกัน** (เหลือ {days_left} วัน)"
+            else:
+                w_status = "⚪ ไม่ระบุข้อมูลประกัน"
+                w_date = "N/A"
+
+            st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid {('#d32f2f' if 'หมดอายุ' in w_status else '#2e7d32')};">
+                <h4 style="margin-top:0;">ข้อมูลอุปกรณ์: {target_asset['id']}</h4>
+                <p><b>รุ่น:</b> {target_asset.get('model', 'N/A')} | <b>แผนก:</b> {target_asset.get('dept', 'N/A')}</p>
+                <p><b>สถานที่ตั้ง:</b> {target_asset.get('location', 'N/A')} | <b>ผู้รับผิดชอบ:</b> {target_asset.get('assigned_user', 'N/A')}</p>
+                <p style="font-size: 1.1em;">สถานะประกัน: {w_status}</p>
+                <p>วันที่หมดประกัน: 📅 {w_date}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.write("---")
+            st.write("### 🛠️ ประวัติการซ่อมและบำรุงรักษา (PM)")
+            
+            tab_repair, tab_pm_hist = st.tabs(["🔧 ประวัติการแจ้งซ่อม", "📅 ประวัติการทำ PM"])
+            
+            with tab_repair:
+                if 'asset_id' in df_t.columns:
+                    history = df_t[df_t['asset_id'] == target_asset['id']]
+                    if not history.empty:
+                        total_cost = pd.to_numeric(history['cost'], errors='coerce').sum()
+                        st.metric("💸 ยอดค่าซ่อมสะสม", f"฿{total_cost:,.2f}")
+                        h_view = history[['date', 'user', 'root_cause', 'solution', 'cost', 'status']].copy()
+                        h_view.columns = ['วันที่', 'ผู้แจ้ง', 'สาเหตุ', 'วิธีแก้', 'ค่าใช้จ่าย', 'สถานะ']
+                        st.dataframe(h_view, use_container_width=True, hide_index=True)
+                    else: st.info("✨ อุปกรณ์นี้ยังไม่มีประวัติการซ่อม")
+                else: st.warning("⚠️ ไม่พบคอลัมน์ 'asset_id' ในฐานข้อมูล")
+
+            with tab_pm_hist:
+                df_pm_hist = load_table("pm_schedules")
+                if not df_pm_hist.empty and 'asset_id' in df_pm_hist.columns:
+                    asset_pm_hist = df_pm_hist[df_pm_hist['asset_id'] == target_asset['id']]
+                    if not asset_pm_hist.empty:
+                        pm_view = asset_pm_hist[['next_due_date', 'task_name', 'assignee', 'status', 'pm_result']].copy()
+                        pm_view.columns = ['วันที่กำหนดทำ', 'ชื่องาน', 'ผู้รับผิดชอบ', 'สถานะ', 'ผลการตรวจสอบ']
+                        st.dataframe(pm_view, use_container_width=True, hide_index=True)
+                    else: st.info("ยังไม่มีประวัติการทำ PM สำหรับอุปกรณ์นี้")
+                else: st.info("ยังไม่มีประวัติการทำ PM สำหรับอุปกรณ์นี้")
+        else: st.error("❌ ไม่พบรหัสอุปกรณ์")
+
+# ==========================================
+# หน้าที่ 5: แผนบำรุงรักษา (PM)
+# ==========================================
+elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_state.is_admin:
+    st.title("🔧 IT Preventive Maintenance System")
+    tab_cal, tab_list, tab_add = st.tabs(["📅 ปฏิทินงาน PM", "📋 รายการและบันทึกผล", "➕ ลงทะเบียนแผนใหม่"])
+    
+    df_pm = load_table("pm_schedules")
+
+    with tab_cal:
+        st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
+        if not df_pm.empty:
+            calendar_events = []
+            for _, row in df_pm.iterrows():
                 try:
-                    inv,net,odds=float(row['Investment']),float(row['Net_Profit']),float(row['Odds'])
-                    if inv<=0: return np.nan
-                    mw=inv*(odds-1)
-                    if net>=mw*0.95: return 1.0
-                    elif net>0: return 0.75
-                    elif net==0: return 0.50
-                    elif net<=-inv*0.95: return 0.0
-                    elif net<0: return 0.25
-                    return np.nan
-                except: return np.nan
-            fin['Actual']=fin.apply(score_row,axis=1); fin=fin.dropna(subset=['Actual'])
-            if not fin.empty:
-                fin['BP']=(1/fin['Odds']).clip(0,1)
-                rp=(((fin['EV_Pct']/100)+1)/fin['Odds']).clip(0,1)
-                fin['OP']=((rp*0.85)+(fin['BP']*0.15)).clip(0,1)
-                fin['OE']=(fin['OP']-fin['Actual'])**2
-                fin['BE']=(fin['BP']-fin['Actual'])**2
-                ao=fin['OE'].mean(); ab=fin['BE'].mean(); diff=ab-ao
-                st.markdown(f'<div class="gem-label">◈ ACCURACY — {len(fin)} SETTLED BETS</div>',unsafe_allow_html=True)
-                rc1,rc2,rc3=st.columns(3)
-                rc1.metric("GEM SCORE",f"{ao:.4f}",f"{-diff:.4f} vs bookie",delta_color="inverse")
-                rc2.metric("BOOKIE SCORE",f"{ab:.4f}")
-                col3="#00ff88" if ao<ab else "#ff3b5c"; lab3="▲ GEM BEATS MARKET" if ao<ab else "▼ CALIBRATION NEEDED"
-                rc3.markdown(f'<div class="gem-panel" style="border-top:2px solid {col3};text-align:center;padding:10px;"><span style="font-family:\'Share Tech Mono\';color:{col3};font-size:0.78rem;">{lab3}</span></div>',unsafe_allow_html=True)
+                    due_date = pd.to_datetime(row['next_due_date']).strftime('%Y-%m-%d')
+                    calendar_events.append({
+                        "id": str(row['id']),
+                        "title": f"🛠️ {row['task_name']}",
+                        "start": due_date, "end": due_date,
+                        "color": "#2e7d32" if row['status'] == "Completed" else "#0046ad",
+                        "allDay": True
+                    })
+                except Exception: continue
 
-                st.markdown('<div class="gem-label" style="margin-top:14px;">◈ CUMULATIVE ERROR</div>',unsafe_allow_html=True)
-                fin=fin.sort_values('Time').reset_index(drop=True)
-                fin['CumO']=fin['OE'].cumsum(); fin['CumB']=fin['BE'].cumsum()
-                fig_bt=go.Figure()
-                fig_bt.add_trace(go.Scatter(x=fin.index,y=fin['CumO'],mode='lines',name='GEM',line=dict(color='#00ff88',width=2)))
-                fig_bt.add_trace(go.Scatter(x=fin.index,y=fin['CumB'],mode='lines',name='Bookmaker',line=dict(color='#ff3b5c',width=2,dash='dot')))
-                neon_layout(fig_bt,"CUMULATIVE BRIER ERROR")
-                fig_bt.update_layout(xaxis_title="Settled Bets",yaxis_title="Cumulative Error")
-                st.plotly_chart(fig_bt,use_container_width=True)
-                with st.expander("◈ RAW DATA"):
-                    st.dataframe(fin[['Time','Match','Target','Odds','Result','Net_Profit','Actual','BP','OP']],use_container_width=True)
-            else: st.info("◈ No records with calculable outcomes")
-        else: st.info("◈ No settled results — update Result column in Dashboard first")
-    else: st.warning("◈ No investment log found")
+            calendar_options = {
+                "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,dayGridWeek"},
+                "initialView": "dayGridMonth", "selectable": True,
+            }
+            
+            cal_action = calendar(events=calendar_events, options=calendar_options, key=f"pm_calendar_{len(calendar_events)}")
+            
+            if cal_action and "callback" in cal_action and cal_action["callback"] == "eventClick":
+                event_id = cal_action["eventClick"]["event"]["id"]
+                clicked_event = df_pm[df_pm['id'] == event_id]
+                
+                if not clicked_event.empty:
+                    target = clicked_event.iloc[0]
+                    st.markdown("---")
+                    st.markdown(f"### 📌 รายละเอียดงาน: {target['task_name']}")
+                    ci1, ci2 = st.columns(2)
+                    with ci1:
+                        st.write(f"**รหัสอุปกรณ์:** {target.get('asset_id', 'N/A')}")
+                        st.write(f"**วันที่กำหนด:** {target['next_due_date']}")
+                    with ci2:
+                        st.write(f"**ผู้รับผิดชอบ:** {target.get('assignee', 'N/A')}")
+                        st.write(f"**สถานะ:** {'🟢 เสร็จสิ้น' if target['status'] == 'Completed' else '🟡 รอทำ'}")
+                    st.info(f"**📝 Checklist:**\n\n{target.get('checklist', 'ไม่มีข้อมูล')}")
+                    if target['status'] == "Completed" and pd.notna(target.get('pm_result')):
+                        st.success(f"**✅ ผลตรวจสอบ:**\n\n{target['pm_result']}")
+        else:
+            st.info("💡 ยังไม่มีข้อมูลแผนงาน PM")
+
+    with tab_list:
+        if not df_pm.empty:
+            st.dataframe(df_pm[['id', 'task_name', 'next_due_date', 'assignee', 'status']], use_container_width=True, hide_index=True)
+            pending = df_pm[df_pm['status'] != 'Completed']
+            
+            if not pending.empty:
+                st.divider()
+                st.subheader("📝 บันทึกผลการตรวจเช็ค")
+                sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
+                target_pm = pending[pending['id'] == sel].iloc[0]
+                
+                with st.expander(f"📌 รายการ Checklist สำหรับ: {target_pm['task_name']}", expanded=True):
+                    st.info(f"**สิ่งที่ต้องตรวจสอบ:**\n\n{target_pm.get('checklist', 'ไม่มีข้อมูล Checklist')}")
+                
+                with st.form("pm_finish_form"):
+                    res = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
+                    if st.form_submit_button("✅ บันทึกและปิดงาน PM"):
+                        update_pm_full(sel, "Completed", res)
+                        st.success(f"บันทึกผลงาน {sel} เรียบร้อยแล้ว"); st.rerun()
+            else:
+                st.success("🎉 ทุกแผนงานดำเนินการเสร็จสิ้นแล้ว!")
+
+    with tab_add:
+        st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
+        with st.form("pm_auto_form"):
+            asset_id_pm = st.text_input("รหัสอุปกรณ์ (Asset ID)*", placeholder="เช่น CCTV-001")
+            
+            eq_type = st.selectbox("ประเภทอุปกรณ์", [
+                "Computer PC", "Notebook", "TEC Printer", "Laser Printer", 
+                "IPDS Printer", "TV", "CCTV", "Server room", "Other"
+            ])
+
+            c1, c2 = st.columns(2)
+            with c1:
+                s_date = st.date_input("เริ่มตั้งแต่วันที่")
+                freq = st.selectbox("ความถี่", ["รายวัน", "รายสัปดาห์", "รายเดือน", "รายปี"])
+            with c2:
+                assign = st.text_input("ช่างผู้รับผิดชอบ")
+                count = st.number_input("จำนวนครั้งที่ต้องการวางแผนล่วงหน้า", min_value=1, value=12)
+            
+            check = st.text_area("รายการ Checklist")
+            
+            if st.form_submit_button("📅 บันทึกและจัดตารางลงปฏิทิน"):
+                if asset_id_pm and assign and check:
+                    curr_date = s_date
+                    current_year = datetime.now().year
+                    
+                    for i in range(count):
+                        # =========================================================
+                        # แก้ไขข้อ 2 (PM ID): เพิ่ม UUID suffix ป้องกัน ID ซ้ำ
+                        # กรณีสร้างแผนเดิมซ้ำในปีเดียวกัน
+                        # =========================================================
+                        unique_suffix = uuid.uuid4().hex[:6].upper()
+                        unique_id = f"PM-{asset_id_pm}-{eq_type}({i+1}/{count}){current_year}-{unique_suffix}"
+                        
+                        insert_data("pm_schedules", {
+                            "id": unique_id, 
+                            "task_name": f"PM {eq_type}: {asset_id_pm} ({i+1}/{count})", 
+                            "next_due_date": str(curr_date), 
+                            "status": "Scheduled", 
+                            "assignee": assign, 
+                            "checklist": check, 
+                            "frequency": freq,
+                            "asset_id": asset_id_pm,
+                            "equipment_type": eq_type
+                        })
+                        
+                        if freq == "รายวัน": curr_date += relativedelta(days=1)
+                        elif freq == "รายสัปดาห์": curr_date += relativedelta(weeks=1)
+                        elif freq == "รายเดือน": curr_date += relativedelta(months=1)
+                        elif freq == "รายปี": curr_date += relativedelta(years=1)
+                    
+                    st.success(f"✅ สร้างแผนงานสำเร็จ! จำนวน {count} รายการสำหรับ {asset_id_pm}")
+                    st.rerun()
+                else:
+                    st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วน (Asset ID, ผู้รับผิดชอบ, Checklist)")
