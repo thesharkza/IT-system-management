@@ -15,29 +15,560 @@ import uuid  # เพิ่มสำหรับแก้ไข Race Condition (
 # แก้ไขข้อ 3: ย้าย st.set_page_config() ขึ้นมาเป็นบรรทัดแรกสุด
 # ก่อน st.markdown() และคำสั่ง UI อื่น ๆ ทั้งหมด
 # =========================================================
-st.set_page_config(page_title="ILT IT Helpdesk", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="ILT IT Helpdesk",
+    page_icon="🛠️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- CUSTOM UI STYLING ---
+# ─────────────────────────────────────────────────────────────
+#  ENTERPRISE UI  —  "Steel & Precision" Design System
+#  โทนสี: Deep Navy (#0B1829) + Steel Blue (#1E6FD9) + Warm White
+#  ฟอนต์: Noto Sans Thai (ภาษาไทยคมชัด) + DM Mono (ID/ตัวเลข)
+# ─────────────────────────────────────────────────────────────
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap');
-    html, body, [class*="css"]  { font-family: 'Prompt', sans-serif; }
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
-    .stTable td, .stTable th { text-align: center !important; }
-    
-    div[data-testid="stSidebar"] .st-bo { display: none !important; }
-    div[data-testid="stSidebar"] div[role="radiogroup"] label {
-        padding: 15px 20px !important;
-        border-radius: 12px !important;
-        margin-bottom: 8px !important;
-        transition: all 0.2s ease !important;
-        width: 100% !important;
-    }
-    div[data-testid="stSidebar"] div[role="radiogroup"] label p { font-size: 20px !important; font-weight: 500 !important; }
-    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] { background-color: #0046ad !important; }
-    div[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p { color: white !important; }
-    </style>
-    """, unsafe_allow_html=True)
+/* ── CSS Variables ─────────────────────────────────── */
+:root {
+    --navy:       #0B1829;
+    --navy-mid:   #112240;
+    --navy-light: #1A3356;
+    --blue:       #1E6FD9;
+    --blue-light: #3B8FFF;
+    --blue-glow:  rgba(30,111,217,0.18);
+    --accent:     #00C6FF;
+    --warn:       #F59E0B;
+    --danger:     #EF4444;
+    --success:    #10B981;
+    --purple:     #8B5CF6;
+    --text-primary:   #E8EDF5;
+    --text-secondary: #8BA0BC;
+    --text-muted:     #4A6080;
+    --border:     rgba(30,111,217,0.25);
+    --border-subtle: rgba(255,255,255,0.07);
+    --card-bg:    rgba(17,34,64,0.85);
+    --sidebar-bg: #0D1F38;
+    --radius:     12px;
+    --radius-lg:  18px;
+    --shadow:     0 4px 24px rgba(0,0,0,0.35);
+    --shadow-blue:0 4px 20px rgba(30,111,217,0.3);
+}
+
+/* ── Global Base ───────────────────────────────────── */
+html, body, [class*="css"], .stApp {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    background-color: var(--navy) !important;
+    color: var(--text-primary) !important;
+}
+
+/* subtle grid texture overlay */
+.stApp::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(30,111,217,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,111,217,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── Sidebar ───────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: var(--sidebar-bg) !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] > div { padding-top: 0 !important; }
+
+/* Sidebar header brand block */
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3 {
+    color: var(--text-primary) !important;
+    letter-spacing: 0.04em;
+}
+
+/* Nav radio group */
+[data-testid="stSidebar"] div[role="radiogroup"] { gap: 4px !important; }
+[data-testid="stSidebar"] div[role="radiogroup"] label {
+    display: flex !important;
+    align-items: center !important;
+    padding: 11px 16px !important;
+    border-radius: 10px !important;
+    margin-bottom: 3px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.18s ease !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    background: transparent !important;
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+    background: rgba(30,111,217,0.12) !important;
+    border-color: var(--border) !important;
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label p {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+    letter-spacing: 0.02em;
+}
+[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
+    background: linear-gradient(135deg, var(--blue), #1557B0) !important;
+    border-color: var(--blue-light) !important;
+    box-shadow: var(--shadow-blue) !important;
+}
+[data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p {
+    color: #fff !important;
+    font-weight: 600 !important;
+}
+/* hide radio dot */
+[data-testid="stSidebar"] .st-bo { display: none !important; }
+
+/* Sidebar divider */
+[data-testid="stSidebar"] hr {
+    border-color: var(--border) !important;
+    margin: 12px 0 !important;
+}
+
+/* Sidebar title */
+[data-testid="stSidebar"] h1 {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    color: var(--text-muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+}
+
+/* ── Main Content Area ─────────────────────────────── */
+.main .block-container {
+    padding: 28px 36px !important;
+    max-width: 1400px !important;
+}
+
+/* ── Page Headers ──────────────────────────────────── */
+h1 {
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    color: var(--text-primary) !important;
+    letter-spacing: -0.01em !important;
+    margin-bottom: 4px !important;
+}
+h2 {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+}
+h3 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}
+
+/* ── Metric Cards ──────────────────────────────────── */
+[data-testid="metric-container"] {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    padding: 20px 24px !important;
+    backdrop-filter: blur(12px) !important;
+    transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+[data-testid="metric-container"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: var(--shadow-blue) !important;
+    border-color: var(--blue) !important;
+}
+[data-testid="metric-container"] label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    color: var(--text-secondary) !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-family: 'DM Mono', monospace !important;
+    font-size: 28px !important;
+    font-weight: 500 !important;
+    color: var(--text-primary) !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricDelta"] {
+    font-size: 12px !important;
+}
+
+/* ── Tabs ──────────────────────────────────────────── */
+[data-testid="stTabs"] [role="tablist"] {
+    border-bottom: 2px solid var(--border) !important;
+    gap: 4px !important;
+    background: transparent !important;
+}
+[data-testid="stTabs"] [role="tab"] {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    padding: 10px 20px !important;
+    border-radius: 8px 8px 0 0 !important;
+    border: 1px solid transparent !important;
+    border-bottom: none !important;
+    transition: all 0.15s ease !important;
+    background: transparent !important;
+}
+[data-testid="stTabs"] [role="tab"]:hover {
+    color: var(--text-primary) !important;
+    background: var(--blue-glow) !important;
+}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    color: var(--accent) !important;
+    border-color: var(--border) !important;
+    background: var(--card-bg) !important;
+    font-weight: 600 !important;
+}
+[data-testid="stTabContent"] {
+    padding-top: 20px !important;
+}
+
+/* ── Buttons ───────────────────────────────────────── */
+.stButton > button {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.03em !important;
+    background: linear-gradient(135deg, var(--blue) 0%, #1557B0 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px 22px !important;
+    transition: all 0.18s ease !important;
+    box-shadow: 0 2px 12px rgba(30,111,217,0.25) !important;
+}
+.stButton > button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(30,111,217,0.45) !important;
+    background: linear-gradient(135deg, var(--blue-light) 0%, var(--blue) 100%) !important;
+}
+.stButton > button:active { transform: translateY(0) !important; }
+
+/* Download button variant */
+[data-testid="stDownloadButton"] > button {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    background: transparent !important;
+    border: 1px solid var(--blue) !important;
+    color: var(--blue-light) !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 9px 18px !important;
+    transition: all 0.18s ease !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: var(--blue-glow) !important;
+    border-color: var(--blue-light) !important;
+    color: #fff !important;
+}
+
+/* Form submit button */
+[data-testid="stFormSubmitButton"] > button {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    background: linear-gradient(135deg, var(--blue) 0%, #1557B0 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    padding: 11px 28px !important;
+    width: 100% !important;
+    transition: all 0.18s ease !important;
+    box-shadow: var(--shadow-blue) !important;
+}
+[data-testid="stFormSubmitButton"] > button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 8px 28px rgba(30,111,217,0.5) !important;
+}
+
+/* ── Form Inputs ───────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stNumberInput"] input {
+    background: var(--navy-mid) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    color: var(--text-primary) !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 13px !important;
+    padding: 10px 14px !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus,
+[data-testid="stNumberInput"] input:focus {
+    border-color: var(--blue) !important;
+    box-shadow: 0 0 0 3px var(--blue-glow) !important;
+    outline: none !important;
+}
+[data-testid="stTextInput"] label,
+[data-testid="stTextArea"] label,
+[data-testid="stNumberInput"] label,
+[data-testid="stSelectbox"] label,
+[data-testid="stDateInput"] label,
+[data-testid="stFileUploader"] label {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.07em !important;
+    margin-bottom: 4px !important;
+}
+
+/* Selectbox */
+[data-testid="stSelectbox"] > div > div {
+    background: var(--navy-mid) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    color: var(--text-primary) !important;
+}
+[data-testid="stSelectbox"] > div > div:hover {
+    border-color: var(--blue) !important;
+}
+
+/* Date input */
+[data-testid="stDateInput"] input {
+    background: var(--navy-mid) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Dataframe / Table ─────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border-radius: var(--radius) !important;
+    overflow: hidden !important;
+    border: 1px solid var(--border) !important;
+}
+[data-testid="stDataFrame"] iframe {
+    border-radius: var(--radius) !important;
+}
+.stTable td, .stTable th { text-align: center !important; }
+.stTable {
+    background: var(--card-bg) !important;
+    border-radius: var(--radius) !important;
+    overflow: hidden !important;
+}
+.stTable th {
+    background: var(--navy-light) !important;
+    color: var(--text-secondary) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}
+.stTable td {
+    color: var(--text-primary) !important;
+    border-color: var(--border-subtle) !important;
+    font-size: 13px !important;
+}
+
+/* ── Alert / Info / Success / Error ───────────────── */
+[data-testid="stAlert"] {
+    border-radius: var(--radius) !important;
+    border: 1px solid !important;
+    font-size: 13px !important;
+}
+.stSuccess {
+    background: rgba(16,185,129,0.1) !important;
+    border-color: rgba(16,185,129,0.4) !important;
+    color: #6EE7B7 !important;
+}
+.stError {
+    background: rgba(239,68,68,0.1) !important;
+    border-color: rgba(239,68,68,0.4) !important;
+    color: #FCA5A5 !important;
+}
+.stWarning {
+    background: rgba(245,158,11,0.1) !important;
+    border-color: rgba(245,158,11,0.4) !important;
+    color: #FCD34D !important;
+}
+.stInfo {
+    background: rgba(30,111,217,0.1) !important;
+    border-color: rgba(30,111,217,0.35) !important;
+    color: #93C5FD !important;
+}
+
+/* ── Expander ──────────────────────────────────────── */
+[data-testid="stExpander"] {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    overflow: hidden !important;
+}
+[data-testid="stExpander"] summary {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    padding: 14px 18px !important;
+}
+[data-testid="stExpander"] summary:hover {
+    background: var(--blue-glow) !important;
+}
+
+/* ── Divider ───────────────────────────────────────── */
+hr {
+    border: none !important;
+    border-top: 1px solid var(--border) !important;
+    margin: 20px 0 !important;
+}
+
+/* ── File Uploader ─────────────────────────────────── */
+[data-testid="stFileUploader"] > div {
+    background: var(--navy-mid) !important;
+    border: 1px dashed var(--border) !important;
+    border-radius: var(--radius) !important;
+    transition: border-color 0.15s ease !important;
+}
+[data-testid="stFileUploader"] > div:hover {
+    border-color: var(--blue) !important;
+}
+
+/* ── Radio Buttons ─────────────────────────────────── */
+[data-testid="stRadio"] label {
+    color: var(--text-primary) !important;
+    font-size: 13px !important;
+}
+
+/* ── Number Input ──────────────────────────────────── */
+[data-testid="stNumberInput"] button {
+    background: var(--navy-light) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Scrollbar ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--navy); }
+::-webkit-scrollbar-thumb { background: var(--navy-light); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+
+/* ── Toast ─────────────────────────────────────────── */
+[data-testid="stToast"] {
+    background: var(--navy-mid) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Form Container ────────────────────────────────── */
+[data-testid="stForm"] {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    padding: 24px !important;
+    backdrop-filter: blur(12px) !important;
+}
+
+/* ── Bar Chart ─────────────────────────────────────── */
+[data-testid="stArrowVegaLiteChart"] {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    padding: 16px !important;
+}
+
+/* ── Sidebar login block ────────────────────────────── */
+[data-testid="stSidebar"] .stTextInput input {
+    background: rgba(255,255,255,0.06) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    font-size: 13px !important;
+}
+
+/* ── Page-specific header band ─────────────────────── */
+.page-header {
+    background: linear-gradient(135deg, var(--navy-mid) 0%, var(--navy-light) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 28px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.page-header-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+.page-header-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+.page-header-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 2px 0 0 0;
+    font-weight: 400;
+}
+
+/* ── Status Badge Chip ─────────────────────────────── */
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+.badge-wait   { background: rgba(239,68,68,0.15);  color: #FCA5A5; border: 1px solid rgba(239,68,68,0.3); }
+.badge-active { background: rgba(245,158,11,0.15); color: #FCD34D; border: 1px solid rgba(245,158,11,0.3); }
+.badge-done   { background: rgba(16,185,129,0.15); color: #6EE7B7; border: 1px solid rgba(16,185,129,0.3); }
+.badge-send   { background: rgba(139,92,246,0.15); color: #C4B5FD; border: 1px solid rgba(139,92,246,0.3); }
+
+/* ── Sidebar brand logo area ───────────────────────── */
+.sidebar-brand {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+}
+.sidebar-brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+.sidebar-brand-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    margin: 2px 0 0 0;
+    letter-spacing: 0.05em;
+}
+
+/* ── Stagger fade-in animation ─────────────────────── */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.main .block-container > * {
+    animation: fadeUp 0.3s ease both;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ── Sidebar brand block ──────────────────────────────
+st.sidebar.markdown("""
+<div class="sidebar-brand">
+  <p class="sidebar-brand-title">🛠️ ILT Helpdesk</p>
+  <p class="sidebar-brand-sub">IT SERVICE MANAGEMENT</p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- DATABASE SETUP ---
 @st.cache_resource
