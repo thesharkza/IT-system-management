@@ -835,22 +835,24 @@ st.sidebar.markdown("""
     margin: 4px 0 8px 0;
 }
 
-/* ── Radio nav: ซ่อน dot ── */
-[data-testid="stSidebar"] .stRadio > div { gap: 3px !important; }
-[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] { display: none !important; }
+/* ── Radio nav ── */
+/* ซ่อนเฉพาะวงกลม radio จุดไข่ปลา ไม่แตะ container ข้อความ */
 [data-testid="stSidebar"] .stRadio input[type="radio"] { display: none !important; }
-[data-testid="stSidebar"] .stRadio div[role="radio"] { display: none !important; }
-[data-testid="stSidebar"] .st-bo,
-[data-testid="stSidebar"] .st-bp,
-[data-testid="stSidebar"] .st-bq { display: none !important; }
+[data-testid="stSidebar"] .stRadio > div > label > div:first-child { display: none !important; }
 
-/* label = nav item */
+/* ซ่อน title "ไปที่หน้า" */
+[data-testid="stSidebar"] .stRadio > label { display: none !important; }
+
+/* ช่องว่างระหว่าง item */
+[data-testid="stSidebar"] .stRadio > div { gap: 2px !important; }
+
+/* label = กรอบเมนู */
 [data-testid="stSidebar"] .stRadio label {
     display: flex !important;
     align-items: center !important;
     padding: 10px 14px !important;
     border-radius: 10px !important;
-    margin-bottom: 3px !important;
+    margin-bottom: 2px !important;
     border: 1px solid transparent !important;
     cursor: pointer !important;
     transition: all 0.16s ease !important;
@@ -859,27 +861,33 @@ st.sidebar.markdown("""
 }
 [data-testid="stSidebar"] .stRadio label:hover {
     background: rgba(30,111,217,0.1) !important;
-    border-color: var(--border) !important;
+    border-color: rgba(30,111,217,0.25) !important;
 }
+/* Active */
 [data-testid="stSidebar"] .stRadio label[data-checked="true"] {
     background: linear-gradient(135deg, #1E6FD9, #1557B0) !important;
     border-color: #3B8FFF !important;
     box-shadow: 0 4px 16px rgba(30,111,217,0.3) !important;
 }
-[data-testid="stSidebar"] .stRadio label p {
+/* ข้อความ — ต้องแน่ใจว่ามองเห็น */
+[data-testid="stSidebar"] .stRadio label p,
+[data-testid="stSidebar"] .stRadio label span,
+[data-testid="stSidebar"] .stRadio label div {
     font-size: 14px !important;
     font-weight: 500 !important;
     color: var(--text-secondary) !important;
-    margin: 0 !important;
 }
-[data-testid="stSidebar"] .stRadio label:hover p {
+[data-testid="stSidebar"] .stRadio label:hover p,
+[data-testid="stSidebar"] .stRadio label:hover span,
+[data-testid="stSidebar"] .stRadio label:hover div {
     color: var(--text-primary) !important;
 }
-[data-testid="stSidebar"] .stRadio label[data-checked="true"] p {
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] p,
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] span,
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] div {
     color: #ffffff !important;
     font-weight: 600 !important;
 }
-[data-testid="stSidebar"] .stRadio > label { display: none !important; }
 
 /* ── ปุ่ม Login / Logout ── */
 [data-testid="stSidebar"] .stButton > button {
