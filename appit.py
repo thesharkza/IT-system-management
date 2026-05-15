@@ -735,26 +735,211 @@ ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ",
 
 # --- LOGIN SYSTEM ---
 ADMIN_PASSWORD = "itpassword123"
-if "is_admin" not in st.session_state: st.session_state.is_admin = False
+if "is_admin"    not in st.session_state: st.session_state.is_admin    = False
+if "active_page" not in st.session_state: st.session_state.active_page = "แจ้งซ่อม"
 
-st.sidebar.title("🔐 IT Authorization")
+# ── CSS: ซ่อน Streamlit radio widget เดิม + สไตล์ nav ────────
+st.sidebar.markdown("""
+<style>
+/* ซ่อน radio widget เดิมทั้งหมด */
+[data-testid="stSidebar"] [role="radiogroup"],
+[data-testid="stSidebar"] .stRadio { display: none !important; }
+
+/* Login section */
+.login-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 0 0 16px 0;
+}
+.login-box-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 12px 0;
+}
+.admin-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+.admin-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #10B981;
+    box-shadow: 0 0 6px #10B981;
+    flex-shrink: 0;
+}
+.admin-badge-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6EE7B7;
+    margin: 0;
+}
+
+/* NAV section label */
+.nav-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 0 4px;
+    margin: 4px 0 8px 0;
+}
+
+/* NAV item */
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 3px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.16s ease;
+    text-decoration: none;
+}
+.nav-item:hover {
+    background: rgba(30,111,217,0.1);
+    border-color: var(--border);
+}
+.nav-item.active {
+    background: linear-gradient(135deg, #1E6FD9, #1557B0);
+    border-color: #3B8FFF;
+    box-shadow: 0 4px 16px rgba(30,111,217,0.3);
+}
+.nav-icon {
+    font-size: 17px;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 22px;
+    text-align: center;
+}
+.nav-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+}
+.nav-item.active .nav-label {
+    color: #fff;
+    font-weight: 600;
+}
+.nav-item:hover .nav-label { color: var(--text-primary); }
+
+/* Sidebar footer */
+.sidebar-footer {
+    position: absolute;
+    bottom: 16px;
+    left: 0; right: 0;
+    padding: 0 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+}
+.sidebar-footer-text {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    text-align: center;
+    letter-spacing: 0.06em;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Login / Admin block ──────────────────────────────
 if not st.session_state.is_admin:
-    admin_pass = st.sidebar.text_input("Admin Password", type="password")
-    if st.sidebar.button("Login"):
+    st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
+    admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
+    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
         if admin_pass == ADMIN_PASSWORD:
             st.session_state.is_admin = True
             st.rerun()
-        else: st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
+        else:
+            st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
 else:
-    st.sidebar.success("IT Admin Mode Active")
-    if st.sidebar.button("Logout"):
+    st.sidebar.markdown("""
+    <div class="admin-badge">
+        <div class="admin-dot"></div>
+        <p class="admin-badge-text">IT Admin Mode</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.is_admin = False
+        st.session_state.active_page = "แจ้งซ่อม"
         st.rerun()
 
-st.sidebar.divider()
-st.sidebar.title("🛠️ Menu")
-menu_options = ["📝 แจ้งซ่อม (User)", "💻 จัดการงานซ่อม (ช่าง)", "📊 Dashboard", "🗄️ ทะเบียนอุปกรณ์", "🔧 แผนบำรุงรักษา (PM)"] if st.session_state.is_admin else ["📝 แจ้งซ่อม (User)"]
-page = st.sidebar.radio("ไปที่หน้า", menu_options)
+st.sidebar.markdown("<hr style='border-color:var(--border);margin:14px 0;'>", unsafe_allow_html=True)
+
+# ── กำหนดรายการเมนู ─────────────────────────────────
+NAV_ITEMS = [
+    ("แจ้งซ่อม",    "📝", "แจ้งซ่อม / ติดตามงาน",  True),   # (key, icon, label, public)
+    ("จัดการงาน",   "💻", "จัดการงานซ่อม",          False),
+    ("Dashboard",   "📊", "Dashboard & รายงาน",     False),
+    ("ทะเบียนอุปกรณ์","🗄️","ทะเบียนอุปกรณ์",        False),
+    ("แผน PM",      "🔧", "แผนบำรุงรักษา (PM)",     False),
+]
+
+st.sidebar.markdown('<p class="nav-section-label">Navigation</p>', unsafe_allow_html=True)
+
+for key, icon, label, is_public in NAV_ITEMS:
+    if not is_public and not st.session_state.is_admin:
+        continue
+    is_active = (st.session_state.active_page == key)
+    active_cls = "active" if is_active else ""
+    st.sidebar.markdown(f"""
+    <div class="nav-item {active_cls}" id="nav-{key}">
+        <span class="nav-icon">{icon}</span>
+        <span class="nav-label">{label}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    # ปุ่มล่องหนสำหรับรับ click (วางซ้อนทับ nav-item ด้วย CSS)
+    if st.sidebar.button(label, key=f"btn_{key}", help=label, use_container_width=True):
+        st.session_state.active_page = key
+        st.rerun()
+
+# ซ่อนปุ่ม Streamlit ที่ใช้รับ click (แสดงเฉพาะ nav-item HTML)
+st.sidebar.markdown("""
+<style>
+[data-testid="stSidebar"] .stButton > button {
+    position: relative !important;
+    margin-top: -52px !important;
+    opacity: 0 !important;
+    height: 46px !important;
+    cursor: pointer !important;
+    z-index: 10 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Sidebar footer ───────────────────────────────────
+st.sidebar.markdown("""
+<div class="sidebar-footer">
+    <p class="sidebar-footer-text">ILT IT HELPDESK v2.0</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Map active_page → page string เดิม (ใช้กับ if/elif ด้านล่าง) ──
+_page_map = {
+    "แจ้งซ่อม":      "📝 แจ้งซ่อม (User)",
+    "จัดการงาน":     "💻 จัดการงานซ่อม (ช่าง)",
+    "Dashboard":     "📊 Dashboard",
+    "ทะเบียนอุปกรณ์": "🗄️ ทะเบียนอุปกรณ์",
+    "แผน PM":        "🔧 แผนบำรุงรักษา (PM)",
+}
+page = _page_map.get(st.session_state.active_page, "📝 แจ้งซ่อม (User)")
 
 # ==========================================
 # หน้าที่ 1: แจ้งซ่อม (User)
