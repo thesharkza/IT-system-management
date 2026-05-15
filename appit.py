@@ -902,29 +902,6 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Login / Admin block ──────────────────────────────
-if not st.session_state.is_admin:
-    st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
-    admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
-    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
-        if admin_pass == ADMIN_PASSWORD:
-            st.session_state.is_admin = True
-            st.rerun()
-        else:
-            st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
-else:
-    st.sidebar.markdown("""
-    <div class="admin-badge">
-        <div class="admin-dot"></div>
-        <p class="admin-badge-text">IT Admin Mode</p>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.sidebar.button("Logout", use_container_width=True):
-        st.session_state.is_admin = False
-        st.rerun()
-
-
-
 # ==========================================
 # หน้าที่ 1: แจ้งซ่อม (User)
 # ==========================================
