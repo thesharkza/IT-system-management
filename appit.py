@@ -119,7 +119,6 @@ html, body, [class*="css"], .stApp {
 [data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] {
     background: linear-gradient(135deg, var(--blue), #1557B0) !important;
     border-color: var(--blue-light) !important;
-    box-shadow: var(--shadow-blue) !important;
 }
 [data-testid="stSidebar"] div[role="radiogroup"] [data-checked="true"] p {
     color: #fff !important;
@@ -840,21 +839,40 @@ st.sidebar.markdown("""
 }
 .nav-item:hover .nav-label { color: var(--text-primary); }
 
-/* Sidebar footer */
-.sidebar-footer {
-    position: absolute;
-    bottom: 16px;
-    left: 0; right: 0;
-    padding: 0 16px;
-    border-top: 1px solid var(--border);
-    padding-top: 14px;
+/* ── ซ่อนตัวอักษรและกรอบปุ่ม nav (secondary buttons) ── */
+[data-testid="stSidebar"] button[kind="secondary"] {
+    color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    position: relative !important;
+    margin-top: -46px !important;
+    height: 44px !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    z-index: 10 !important;
+    opacity: 0 !important;
+    padding: 0 !important;
 }
-.sidebar-footer-text {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-family: 'DM Mono', monospace;
-    text-align: center;
-    letter-spacing: 0.06em;
+/* ── ปุ่ม Login / Logout ใช้ type="primary" มองเห็นปกติ ── */
+[data-testid="stSidebar"] button[kind="primary"] {
+    opacity: 1 !important;
+    position: static !important;
+    margin-top: 0 !important;
+    color: #fff !important;
+    background: linear-gradient(135deg, var(--blue), #1557B0) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    height: auto !important;
+    padding: 10px 18px !important;
+    box-shadow: var(--shadow-blue) !important;
+    transition: all 0.18s ease !important;
+}
+[data-testid="stSidebar"] button[kind="primary"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(30,111,217,0.45) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -863,14 +881,12 @@ st.sidebar.markdown("""
 if not st.session_state.is_admin:
     st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
     admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
-    st.sidebar.markdown('<div class="auth-btn-wrap">', unsafe_allow_html=True)
-    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
+    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True, type="primary"):
         if admin_pass == ADMIN_PASSWORD:
             st.session_state.is_admin = True
             st.rerun()
         else:
             st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
 else:
     st.sidebar.markdown("""
     <div class="admin-badge">
@@ -878,12 +894,10 @@ else:
         <p class="admin-badge-text">IT Admin Mode</p>
     </div>
     """, unsafe_allow_html=True)
-    st.sidebar.markdown('<div class="auth-btn-wrap">', unsafe_allow_html=True)
-    if st.sidebar.button("Logout", use_container_width=True):
+    if st.sidebar.button("Logout", use_container_width=True, type="primary"):
         st.session_state.is_admin = False
         st.session_state.active_page = "แจ้งซ่อม"
         st.rerun()
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.markdown("<hr style='border-color:var(--border);margin:14px 0;'>", unsafe_allow_html=True)
 
@@ -908,37 +922,12 @@ for key, icon, label, is_public in NAV_ITEMS:
         <span class="nav-icon">{icon}</span>
         <span class="nav-label">{label}</span>
     </div>
-    <div class="nav-btn-wrap">
     """, unsafe_allow_html=True)
-    if st.sidebar.button(label, key=f"btn_{key}", help=label, use_container_width=True):
+    if st.sidebar.button(label, key=f"btn_{key}", use_container_width=True):
         st.session_state.active_page = key
         st.rerun()
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-# ซ่อนเฉพาะปุ่ม nav (btn_*) โดยใช้ data-testid ของแต่ละปุ่ม
-# วิธีที่ปลอดภัยที่สุดคือ wrap nav button ใน div.nav-btn-wrap แล้ว target เฉพาะ class นั้น
-st.sidebar.markdown("""
-<style>
-/* ซ่อนเฉพาะปุ่ม nav ที่อยู่ใน .nav-btn-wrap */
-.nav-btn-wrap > div > button {
-    position: relative !important;
-    margin-top: -48px !important;
-    opacity: 0 !important;
-    height: 44px !important;
-    width: 100% !important;
-    cursor: pointer !important;
-    z-index: 10 !important;
-    border: none !important;
-    background: transparent !important;
-}
-/* ปุ่ม Login / Logout ต้องมองเห็นได้ปกติ */
-.auth-btn-wrap > div > button {
-    opacity: 1 !important;
-    position: static !important;
-    margin-top: 0 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+
 
 # ── Map active_page → page string เดิม (ใช้กับ if/elif ด้านล่าง) ──
 _page_map = {
