@@ -782,7 +782,9 @@ _page_map = {
 }
 page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 
-/* Login section */
+st.sidebar.markdown("""
+<style>
+/* ── Login / Admin badges ── */
 .login-box {
     background: rgba(255,255,255,0.04);
     border: 1px solid var(--border);
@@ -822,7 +824,7 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
     margin: 0;
 }
 
-/* NAV section label */
+/* ── NAV section label ── */
 .nav-section-label {
     font-size: 10px;
     font-weight: 700;
@@ -833,11 +835,8 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
     margin: 4px 0 8px 0;
 }
 
-
-/* ── NAV: ซ่อน radio dot + จัดสไตล์ใหม่ทั้งหมด ── */
+/* ── Radio nav: ซ่อน dot ── */
 [data-testid="stSidebar"] .stRadio > div { gap: 3px !important; }
-
-/* ซ่อน radio circle */
 [data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] { display: none !important; }
 [data-testid="stSidebar"] .stRadio input[type="radio"] { display: none !important; }
 [data-testid="stSidebar"] .stRadio div[role="radio"] { display: none !important; }
@@ -862,14 +861,11 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
     background: rgba(30,111,217,0.1) !important;
     border-color: var(--border) !important;
 }
-/* Active item */
-[data-testid="stSidebar"] .stRadio label[data-checked="true"],
-[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] {
     background: linear-gradient(135deg, #1E6FD9, #1557B0) !important;
     border-color: #3B8FFF !important;
     box-shadow: 0 4px 16px rgba(30,111,217,0.3) !important;
 }
-/* ข้อความใน label */
 [data-testid="stSidebar"] .stRadio label p {
     font-size: 14px !important;
     font-weight: 500 !important;
@@ -879,19 +875,14 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 [data-testid="stSidebar"] .stRadio label:hover p {
     color: var(--text-primary) !important;
 }
-[data-testid="stSidebar"] .stRadio label[data-checked="true"] p,
-[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] p {
     color: #ffffff !important;
     font-weight: 600 !important;
 }
-/* ซ่อน label หัวของ radio group ("ไปที่หน้า") */
 [data-testid="stSidebar"] .stRadio > label { display: none !important; }
 
 /* ── ปุ่ม Login / Logout ── */
 [data-testid="stSidebar"] .stButton > button {
-    opacity: 1 !important;
-    position: static !important;
-    margin-top: 0 !important;
     color: #fff !important;
     background: linear-gradient(135deg, var(--blue), #1557B0) !important;
     border: none !important;
