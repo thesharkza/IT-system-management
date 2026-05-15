@@ -734,15 +734,53 @@ ticket_statuses = ["รอตรวจสอบ", "ดำเนินการ",
 
 # --- LOGIN SYSTEM ---
 ADMIN_PASSWORD = "itpassword123"
-if "is_admin"    not in st.session_state: st.session_state.is_admin    = False
-if "active_page" not in st.session_state: st.session_state.active_page = "แจ้งซ่อม"
+if "is_admin" not in st.session_state: st.session_state.is_admin = False
 
-# ── CSS: ซ่อน Streamlit radio widget เดิม + สไตล์ nav ────────
-st.sidebar.markdown("""
-<style>
-/* ซ่อน radio widget เดิมทั้งหมด */
-[data-testid="stSidebar"] [role="radiogroup"],
-[data-testid="stSidebar"] .stRadio { display: none !important; }
+# ── Login / Admin block ──────────────────────────────
+if not st.session_state.is_admin:
+    st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
+    admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
+    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
+        if admin_pass == ADMIN_PASSWORD:
+            st.session_state.is_admin = True
+            st.rerun()
+        else:
+            st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
+else:
+    st.sidebar.markdown("""
+    <div class="admin-badge">
+        <div class="admin-dot"></div>
+        <p class="admin-badge-text">IT Admin Mode</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.sidebar.button("Logout", use_container_width=True):
+        st.session_state.is_admin = False
+        st.rerun()
+
+st.sidebar.markdown("<hr style='border-color:var(--border);margin:14px 0;'>", unsafe_allow_html=True)
+st.sidebar.markdown('<p class="nav-section-label">Navigation</p>', unsafe_allow_html=True)
+
+# ── Menu ใช้ st.radio() แบบเดิม — คลิกตรง ไม่มีจุดไข่ปลา ──
+menu_options = [
+    "📝  แจ้งซ่อม / ติดตามงาน",
+    "💻  จัดการงานซ่อม",
+    "📊  Dashboard & รายงาน",
+    "🗄️  ทะเบียนอุปกรณ์",
+    "🔧  แผนบำรุงรักษา (PM)",
+] if st.session_state.is_admin else [
+    "📝  แจ้งซ่อม / ติดตามงาน",
+]
+page_label = st.sidebar.radio("ไปที่หน้า", menu_options, label_visibility="collapsed")
+
+# map label → page key เดิม
+_page_map = {
+    "📝  แจ้งซ่อม / ติดตามงาน":  "📝 แจ้งซ่อม (User)",
+    "💻  จัดการงานซ่อม":          "💻 จัดการงานซ่อม (ช่าง)",
+    "📊  Dashboard & รายงาน":     "📊 Dashboard",
+    "🗄️  ทะเบียนอุปกรณ์":         "🗄️ ทะเบียนอุปกรณ์",
+    "🔧  แผนบำรุงรักษา (PM)":     "🔧 แผนบำรุงรักษา (PM)",
+}
+page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 
 /* Login section */
 .login-box {
@@ -795,67 +833,62 @@ st.sidebar.markdown("""
     margin: 4px 0 8px 0;
 }
 
-/* NAV item */
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    margin-bottom: 3px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 0.16s ease;
-    text-decoration: none;
-}
-.nav-item:hover {
-    background: rgba(30,111,217,0.1);
-    border-color: var(--border);
-}
-.nav-item.active {
-    background: linear-gradient(135deg, #1E6FD9, #1557B0);
-    border-color: #3B8FFF;
-    box-shadow: 0 4px 16px rgba(30,111,217,0.3);
-}
-.nav-icon {
-    font-size: 17px;
-    line-height: 1;
-    flex-shrink: 0;
-    width: 22px;
-    text-align: center;
-}
-.nav-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: clip;
-}
-.nav-item.active .nav-label {
-    color: #fff;
-    font-weight: 600;
-}
-.nav-item:hover .nav-label { color: var(--text-primary); }
 
-/* ── ซ่อนตัวอักษรและกรอบปุ่ม nav (secondary buttons) ── */
-[data-testid="stSidebar"] button[kind="secondary"] {
-    color: transparent !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    position: relative !important;
-    margin-top: -46px !important;
-    height: 44px !important;
-    width: 100% !important;
+/* ── NAV: ซ่อน radio dot + จัดสไตล์ใหม่ทั้งหมด ── */
+[data-testid="stSidebar"] .stRadio > div { gap: 3px !important; }
+
+/* ซ่อน radio circle */
+[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] { display: none !important; }
+[data-testid="stSidebar"] .stRadio input[type="radio"] { display: none !important; }
+[data-testid="stSidebar"] .stRadio div[role="radio"] { display: none !important; }
+[data-testid="stSidebar"] .st-bo,
+[data-testid="stSidebar"] .st-bp,
+[data-testid="stSidebar"] .st-bq { display: none !important; }
+
+/* label = nav item */
+[data-testid="stSidebar"] .stRadio label {
+    display: flex !important;
+    align-items: center !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    margin-bottom: 3px !important;
+    border: 1px solid transparent !important;
     cursor: pointer !important;
-    z-index: 10 !important;
-    opacity: 0 !important;
-    padding: 0 !important;
+    transition: all 0.16s ease !important;
+    width: 100% !important;
+    background: transparent !important;
 }
-/* ── ปุ่ม Login / Logout ใช้ type="primary" มองเห็นปกติ ── */
-[data-testid="stSidebar"] button[kind="primary"] {
+[data-testid="stSidebar"] .stRadio label:hover {
+    background: rgba(30,111,217,0.1) !important;
+    border-color: var(--border) !important;
+}
+/* Active item */
+[data-testid="stSidebar"] .stRadio label[data-checked="true"],
+[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
+    background: linear-gradient(135deg, #1E6FD9, #1557B0) !important;
+    border-color: #3B8FFF !important;
+    box-shadow: 0 4px 16px rgba(30,111,217,0.3) !important;
+}
+/* ข้อความใน label */
+[data-testid="stSidebar"] .stRadio label p {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+}
+[data-testid="stSidebar"] .stRadio label:hover p {
+    color: var(--text-primary) !important;
+}
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] p,
+[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+/* ซ่อน label หัวของ radio group ("ไปที่หน้า") */
+[data-testid="stSidebar"] .stRadio > label { display: none !important; }
+
+/* ── ปุ่ม Login / Logout ── */
+[data-testid="stSidebar"] .stButton > button {
     opacity: 1 !important;
     position: static !important;
     margin-top: 0 !important;
@@ -863,14 +896,15 @@ st.sidebar.markdown("""
     background: linear-gradient(135deg, var(--blue), #1557B0) !important;
     border: none !important;
     border-radius: 8px !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
     font-size: 13px !important;
     font-weight: 600 !important;
-    height: auto !important;
     padding: 10px 18px !important;
     box-shadow: var(--shadow-blue) !important;
     transition: all 0.18s ease !important;
+    width: 100% !important;
 }
-[data-testid="stSidebar"] button[kind="primary"]:hover {
+[data-testid="stSidebar"] .stButton > button:hover {
     transform: translateY(-1px) !important;
     box-shadow: 0 6px 20px rgba(30,111,217,0.45) !important;
 }
@@ -881,7 +915,7 @@ st.sidebar.markdown("""
 if not st.session_state.is_admin:
     st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
     admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
-    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True, type="primary"):
+    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
         if admin_pass == ADMIN_PASSWORD:
             st.session_state.is_admin = True
             st.rerun()
@@ -894,50 +928,11 @@ else:
         <p class="admin-badge-text">IT Admin Mode</p>
     </div>
     """, unsafe_allow_html=True)
-    if st.sidebar.button("Logout", use_container_width=True, type="primary"):
+    if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.is_admin = False
-        st.session_state.active_page = "แจ้งซ่อม"
-        st.rerun()
-
-st.sidebar.markdown("<hr style='border-color:var(--border);margin:14px 0;'>", unsafe_allow_html=True)
-
-# ── กำหนดรายการเมนู ─────────────────────────────────
-NAV_ITEMS = [
-    ("แจ้งซ่อม",    "📝", "แจ้งซ่อม / ติดตามงาน",  True),   # (key, icon, label, public)
-    ("จัดการงาน",   "💻", "จัดการงานซ่อม",          False),
-    ("Dashboard",   "📊", "Dashboard & รายงาน",     False),
-    ("ทะเบียนอุปกรณ์","🗄️","ทะเบียนอุปกรณ์",        False),
-    ("แผน PM",      "🔧", "แผนบำรุงรักษา (PM)",     False),
-]
-
-st.sidebar.markdown('<p class="nav-section-label">Navigation</p>', unsafe_allow_html=True)
-
-for key, icon, label, is_public in NAV_ITEMS:
-    if not is_public and not st.session_state.is_admin:
-        continue
-    is_active = (st.session_state.active_page == key)
-    active_cls = "active" if is_active else ""
-    st.sidebar.markdown(f"""
-    <div class="nav-item {active_cls}" id="nav-{key}">
-        <span class="nav-icon">{icon}</span>
-        <span class="nav-label">{label}</span>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.sidebar.button(label, key=f"btn_{key}", use_container_width=True):
-        st.session_state.active_page = key
         st.rerun()
 
 
-
-# ── Map active_page → page string เดิม (ใช้กับ if/elif ด้านล่าง) ──
-_page_map = {
-    "แจ้งซ่อม":      "📝 แจ้งซ่อม (User)",
-    "จัดการงาน":     "💻 จัดการงานซ่อม (ช่าง)",
-    "Dashboard":     "📊 Dashboard",
-    "ทะเบียนอุปกรณ์": "🗄️ ทะเบียนอุปกรณ์",
-    "แผน PM":        "🔧 แผนบำรุงรักษา (PM)",
-}
-page = _page_map.get(st.session_state.active_page, "📝 แจ้งซ่อม (User)")
 
 # ==========================================
 # หน้าที่ 1: แจ้งซ่อม (User)
