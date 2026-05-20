@@ -463,7 +463,7 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
     st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
-    tab_status, tab1, tab2 = st.tabs(["📋 ตรวจสอบสถานะงานซ่อม", "🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
+    tab_status, tab1 = st.tabs(["📋 ตรวจสอบสถานะงานซ่อม", "🆕 ส่งใบแจ้งซ่อม"])
 
     with tab_status:
         df_tickets = load_table("tickets")
@@ -514,6 +514,27 @@ if page == "📝 แจ้งซ่อม (User)":
                 if pd.notna(row.get('feedback')) and row.get('feedback'):
                     st.markdown("**💬 ข้อเสนอแนะ**")
                     st.markdown(f"<p style='color:#8BA0BC;font-style:italic;'>\"{row.get('feedback')}\"</p>", unsafe_allow_html=True)
+
+                # ── ฟอร์มประเมินความพึงพอใจ (เฉพาะงานสำเร็จที่ยังไม่ประเมิน) ──
+                is_done_ticket = row['status'] == 'สำเร็จ'
+                not_rated = pd.isna(row.get('q1'))
+                if is_done_ticket and not_rated:
+                    st.divider()
+                    st.markdown("### ⭐ ประเมินความพึงพอใจ")
+                    st.markdown("<p style='color:#8BA0BC;font-size:12px;margin-bottom:12px;'>งานนี้ดำเนินการเสร็จสิ้นแล้ว กรุณาประเมินการให้บริการเพื่อช่วยเราพัฒนา</p>", unsafe_allow_html=True)
+                    with st.form(f"csat_dialog_{row['id']}"):
+                        q1 = st.radio("1. ความพอใจการสนับสนุนจากทีมงาน?", scale_options, horizontal=True, key=f"q1_{row['id']}")
+                        q2 = st.radio("2. คุณภาพการบริการ HW/SW?",        scale_options, horizontal=True, key=f"q2_{row['id']}")
+                        q3 = st.radio("3. ความมืออาชีพของทีมงาน?",         scale_options, horizontal=True, key=f"q3_{row['id']}")
+                        q4 = st.radio("4. การบริการที่ตรงต่อเวลา?",         scale_options, horizontal=True, key=f"q4_{row['id']}")
+                        q5 = st.radio("5. ความพึงพอใจในภาพรวม?",          scale_options, horizontal=True, key=f"q5_{row['id']}")
+                        fb = st.text_area("ข้อเสนอแนะเพิ่มเติม", key=f"fb_{row['id']}")
+                        if st.form_submit_button("✅ บันทึกการประเมิน", use_container_width=True):
+                            update_csat_full(row['id'],
+                                rating_scale[q1], rating_scale[q2], rating_scale[q3],
+                                rating_scale[q4], rating_scale[q5], fb)
+                            st.toast("ขอบคุณสำหรับการประเมิน!", icon="⭐")
+                            st.rerun()
 
             for _, row in df_sorted.iterrows():
                 status_cls  = f"status-{row['status']}"
@@ -583,25 +604,6 @@ if page == "📝 แจ้งซ่อม (User)":
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
                 else:
                     st.error("❌ กรุณาระบุชื่อผู้แจ้ง, แผนก และรายละเอียดปัญหา")
-
-    with tab2:
-        st.subheader("งานซ่อมที่รอการประเมิน")
-        df_all = load_table("tickets")
-        if not df_all.empty:
-            ready_to_rate = df_all[(df_all['status'] == 'สำเร็จ') & (df_all['q1'].isna())]
-            if not ready_to_rate.empty:
-                selected_job = st.selectbox("เลือกงานซ่อมที่คุณต้องการประเมิน", ready_to_rate['id'].tolist())
-                with st.form("detailed_csat_form"):
-                    q1 = st.radio("1. ความพอใจการสนับสนุนจากทีมงาน?", scale_options, horizontal=True)
-                    q2 = st.radio("2. คุณภาพการบริการ HW/SW?", scale_options, horizontal=True)
-                    q3 = st.radio("3. ความมืออาชีพของทีมงาน?", scale_options, horizontal=True)
-                    q4 = st.radio("4. การบริการที่ตรงต่อเวลา?", scale_options, horizontal=True)
-                    q5 = st.radio("5. ความพึงพอใจในภาพรวม?", scale_options, horizontal=True)
-                    fback = st.text_area("ข้อเสนอแนะเพิ่มเติม")
-                    if st.form_submit_button("บันทึกการประเมิน"):
-                        update_csat_full(selected_job, rating_scale[q1], rating_scale[q2], rating_scale[q3], rating_scale[q4], rating_scale[q5], fback)
-                        st.success("ขอบคุณสำหรับคะแนนครับ!"); st.rerun()
-            else: st.info("ไม่มีงานซ่อมที่รอการประเมิน")
 
 # ==========================================
 # หน้า 2: จัดการงานซ่อม
