@@ -303,6 +303,47 @@ hr { border: none !important; border-top: 1px solid var(--border) !important; ma
 [data-baseweb="option"] { background: var(--navy-mid) !important; color: var(--text-primary) !important; }
 [data-baseweb="option"]:hover { background: var(--navy-light) !important; }
 
+/* ── Top Navigation Bar (Main Page) ── */
+.top-nav-wrap {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 8px;
+    margin: 0 0 22px 0;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    overflow-x: auto;
+}
+.top-nav-btn-group { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+
+/* เปลี่ยนปุ่ม top-nav (ใช้ st.button) ให้ดูเป็น tab */
+.top-nav-wrap [data-testid="stHorizontalBlock"] [data-testid="stButton"] > button,
+.top-nav-row [data-testid="stButton"] > button {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 9px 14px !important;
+    border-radius: 10px !important;
+    white-space: nowrap !important;
+}
+.top-nav-row [data-testid="stButton"] > button:hover {
+    background: rgba(30,111,217,0.1) !important;
+    color: var(--text-primary) !important;
+    border-color: rgba(30,111,217,0.3) !important;
+    transform: none !important;
+}
+.top-nav-row .top-nav-active [data-testid="stButton"] > button {
+    background: linear-gradient(135deg, var(--blue), #1557B0) !important;
+    color: #fff !important;
+    border-color: var(--blue-light) !important;
+    box-shadow: var(--shadow-blue) !important;
+    font-weight: 600 !important;
+}
+
 /* ── ซ่อน Streamlit menu / footer ── */
 #MainMenu, footer { visibility: hidden !important; }
 [data-testid="stToolbar"] { display: none !important; }
@@ -472,16 +513,52 @@ else:
 st.sidebar.markdown("<hr style='border-color:rgba(30,111,217,0.25);margin:14px 0;'>", unsafe_allow_html=True)
 st.sidebar.markdown('<p class="nav-section-label">Navigation</p>', unsafe_allow_html=True)
 
-menu_options = ["📝  แจ้งซ่อม / ติดตามงาน","💻  จัดการงานซ่อม","📊  Dashboard & รายงาน","🗄️  ทะเบียนอุปกรณ์","🔧  แผนบำรุงรักษา (PM)"] if st.session_state.is_admin else ["📝  แจ้งซ่อม / ติดตามงาน"]
-page_label = st.sidebar.radio("ไปที่หน้า", menu_options, label_visibility="collapsed")
-_page_map = {
-    "📝  แจ้งซ่อม / ติดตามงาน": "📝 แจ้งซ่อม (User)",
-    "💻  จัดการงานซ่อม":         "💻 จัดการงานซ่อม (ช่าง)",
-    "📊  Dashboard & รายงาน":    "📊 Dashboard",
-    "🗄️  ทะเบียนอุปกรณ์":        "🗄️ ทะเบียนอุปกรณ์",
-    "🔧  แผนบำรุงรักษา (PM)":    "🔧 แผนบำรุงรักษา (PM)",
-}
-page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
+# ── Master menu list ──
+ALL_MENU = [
+    ("📝", "แจ้งซ่อม / ติดตามงาน",  "📝 แจ้งซ่อม (User)",         True),    # (icon, label, page_key, public)
+    ("💻", "จัดการงานซ่อม",          "💻 จัดการงานซ่อม (ช่าง)",   False),
+    ("📊", "Dashboard & รายงาน",      "📊 Dashboard",               False),
+    ("🗄️", "ทะเบียนอุปกรณ์",          "🗄️ ทะเบียนอุปกรณ์",         False),
+    ("🔧", "แผนบำรุงรักษา (PM)",     "🔧 แผนบำรุงรักษา (PM)",     False),
+]
+visible_menu = [m for m in ALL_MENU if m[3] or st.session_state.is_admin]
+
+if "active_page" not in st.session_state:
+    st.session_state.active_page = visible_menu[0][2]
+
+# ถ้า logout แล้ว active_page เป็นหน้า admin → กลับไปหน้า user
+allowed_keys = [m[2] for m in visible_menu]
+if st.session_state.active_page not in allowed_keys:
+    st.session_state.active_page = visible_menu[0][2]
+
+# ── Sidebar navigation (สำหรับ desktop) ──
+sb_options = [f"{m[0]}  {m[1]}" for m in visible_menu]
+sb_keys    = [m[2] for m in visible_menu]
+try:
+    sb_default_idx = sb_keys.index(st.session_state.active_page)
+except ValueError:
+    sb_default_idx = 0
+sb_choice = st.sidebar.radio("ไปที่หน้า", sb_options, index=sb_default_idx, label_visibility="collapsed", key="sb_nav")
+if sb_keys[sb_options.index(sb_choice)] != st.session_state.active_page:
+    st.session_state.active_page = sb_keys[sb_options.index(sb_choice)]
+    st.rerun()
+
+page = st.session_state.active_page
+
+# ── Top Navigation Bar (Main Page) — ทำงานบนทุกอุปกรณ์ ไม่ต้องเปิด sidebar ──
+nav_cols = st.columns(len(visible_menu))
+for i, (icon, label, key, _) in enumerate(visible_menu):
+    is_active = (st.session_state.active_page == key)
+    with nav_cols[i]:
+        wrapper_class = "top-nav-row top-nav-active" if is_active else "top-nav-row"
+        st.markdown(f'<div class="{wrapper_class}">', unsafe_allow_html=True)
+        if st.button(f"{icon}  {label}", key=f"topnav_{key}", use_container_width=True):
+            if st.session_state.active_page != key:
+                st.session_state.active_page = key
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # หน้า 1: แจ้งซ่อม
