@@ -457,10 +457,11 @@ ADMIN_PASSWORD = "itpassword123"
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 
 if not st.session_state.is_admin:
+    # ── แสดงสถานะ + ปุ่ม Login ใน sidebar ──
     st.sidebar.markdown('<div class="login-box"><p class="login-box-title">🔐 Admin Login</p></div>', unsafe_allow_html=True)
-    admin_pass = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password")
-    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True):
-        if admin_pass == ADMIN_PASSWORD:
+    admin_pass_sb = st.sidebar.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter admin password", key="pwd_sb")
+    if st.sidebar.button("เข้าสู่ระบบ", use_container_width=True, key="login_sb"):
+        if admin_pass_sb == ADMIN_PASSWORD:
             st.session_state.is_admin = True; st.rerun()
         else: st.sidebar.error("รหัสผ่านไม่ถูกต้อง")
 else:
@@ -486,7 +487,26 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 # หน้า 1: แจ้งซ่อม
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
-    st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
+    # ── Header bar: Title + Login button (เมื่อยังไม่ login) ──
+    hcol1, hcol2 = st.columns([5, 2])
+    with hcol1:
+        st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
+    with hcol2:
+        if not st.session_state.is_admin:
+            with st.popover("🔐 IT Admin Login", use_container_width=True):
+                st.markdown("**เข้าสู่ระบบสำหรับผู้ดูแล**")
+                pwd_main = st.text_input("รหัสผ่าน", type="password", key="pwd_main", placeholder="Enter password")
+                if st.button("เข้าสู่ระบบ", use_container_width=True, key="login_main"):
+                    if pwd_main == ADMIN_PASSWORD:
+                        st.session_state.is_admin = True; st.rerun()
+                    else: st.error("รหัสผ่านไม่ถูกต้อง")
+        else:
+            st.markdown("""
+            <div style="text-align:right;padding-top:18px;">
+              <span class="status-badge status-สำเร็จ">✓ IT Admin Mode</span>
+            </div>
+            """, unsafe_allow_html=True)
+
     tab_status, tab1 = st.tabs(["📋 ตรวจสอบสถานะงานซ่อม", "🆕 ส่งใบแจ้งซ่อม"])
 
     with tab_status:
