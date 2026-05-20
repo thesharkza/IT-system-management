@@ -531,21 +531,36 @@ allowed_keys = [m[2] for m in visible_menu]
 if st.session_state.active_page not in allowed_keys:
     st.session_state.active_page = visible_menu[0][2]
 
-# ── Sidebar navigation (สำหรับ desktop) ──
+# ── Sidebar navigation ──
 sb_options = [f"{m[0]}  {m[1]}" for m in visible_menu]
 sb_keys    = [m[2] for m in visible_menu]
+sb_key_by_label = dict(zip(sb_options, sb_keys))
+
+def _on_sb_nav_change():
+    """ถูกเรียกเฉพาะตอนผู้ใช้คลิก sidebar radio จริง ๆ"""
+    chosen = st.session_state.sb_nav
+    st.session_state.active_page = sb_key_by_label.get(chosen, st.session_state.active_page)
+
 try:
     sb_default_idx = sb_keys.index(st.session_state.active_page)
 except ValueError:
     sb_default_idx = 0
-sb_choice = st.sidebar.radio("ไปที่หน้า", sb_options, index=sb_default_idx, label_visibility="collapsed", key="sb_nav")
-if sb_keys[sb_options.index(sb_choice)] != st.session_state.active_page:
-    st.session_state.active_page = sb_keys[sb_options.index(sb_choice)]
-    st.rerun()
+
+# sync sidebar radio ให้ตรงกับ active_page ก่อน render (กรณี top nav เพิ่งเปลี่ยน)
+st.session_state.sb_nav = sb_options[sb_default_idx]
+
+st.sidebar.radio(
+    "ไปที่หน้า",
+    sb_options,
+    index=sb_default_idx,
+    label_visibility="collapsed",
+    key="sb_nav",
+    on_change=_on_sb_nav_change,
+)
 
 page = st.session_state.active_page
 
-# ── Top Navigation Bar (Main Page) — ทำงานบนทุกอุปกรณ์ ไม่ต้องเปิด sidebar ──
+# ── Top Navigation Bar ──
 nav_cols = st.columns(len(visible_menu))
 for i, (icon, label, key, _) in enumerate(visible_menu):
     is_active = (st.session_state.active_page == key)
@@ -553,9 +568,8 @@ for i, (icon, label, key, _) in enumerate(visible_menu):
         wrapper_class = "top-nav-row top-nav-active" if is_active else "top-nav-row"
         st.markdown(f'<div class="{wrapper_class}">', unsafe_allow_html=True)
         if st.button(f"{icon}  {label}", key=f"topnav_{key}", use_container_width=True):
-            if st.session_state.active_page != key:
-                st.session_state.active_page = key
-                st.rerun()
+            st.session_state.active_page = key
+            st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
