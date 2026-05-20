@@ -504,30 +504,92 @@ if page == "📝 แจ้งซ่อม (User)":
             df_tickets['_sort'] = df_tickets['status'].map(sort_map)
             df_sorted = df_tickets.sort_values(by=['_sort','date'], ascending=[True,False])
 
-            # ── Ticket Cards แทนตาราง ──
-            for _, row in df_sorted.iterrows():
+            # ── Dialog: แสดงรายละเอียด (อ่านอย่างเดียว) ──
+            @st.dialog("📋 รายละเอียดงานซ่อม", width="large")
+            def show_ticket_detail(row):
                 status_cls = f"status-{row['status']}"
-                urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
                 rating_val = row.get('rating')
-                rating_html = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else '<span style="color:#4A6080;font-size:11px;">รอประเมิน</span>'
+                stars = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else "รอประเมิน"
                 st.markdown(f"""
-                <div class="ticket-card">
-                    <div class="ticket-card-left">
-                        <div class="ticket-id">{row['id']}</div>
-                        <div class="ticket-user">{row.get('user','')}</div>
-                        <div class="ticket-date">{row.get('date','')}</div>
-                    </div>
-                    <div class="ticket-card-mid">
-                        <div class="ticket-cat">📂 {row.get('category','')} &nbsp;|&nbsp; 🖥️ {row.get('equipment_type','')}</div>
-                        <div class="ticket-cat" style="margin-top:4px;">🏢 {row.get('dept','')}</div>
-                        <div class="{urgency_cls}" style="margin-top:4px;">⚡ {row.get('urgency','')}</div>
-                    </div>
-                    <div class="ticket-card-right">
-                        <div><span class="status-badge {status_cls}">{row['status']}</span></div>
-                        <div class="ticket-rating" style="margin-top:8px;">{rating_html}</div>
-                    </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div>
+                    <span style="font-family:'DM Mono',monospace;font-size:13px;color:#00C6FF;">{row['id']}</span>
+                    <span style="margin-left:12px;" class="status-badge {status_cls}">{row['status']}</span>
+                  </div>
+                  <div style="font-size:12px;color:#4A6080;">{row.get('date','')}</div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**👤 ผู้แจ้ง**")
+                    st.markdown(f"<p style='color:#E8EDF5;font-size:15px;'>{row.get('user','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**🏢 แผนก**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('dept','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**📍 สถานที่ตั้ง**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('location','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**⚡ ความเร่งด่วน**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('urgency','—')}</p>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown("**🖥️ ประเภทอุปกรณ์**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('equipment_type','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**🔖 รหัสทรัพย์สิน**")
+                    st.markdown(f"<p style='color:#E8EDF5;font-family:DM Mono,monospace;'>{row.get('asset_id','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**📂 ประเภทงาน**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('category','—')}</p>", unsafe_allow_html=True)
+                    st.markdown("**🔧 ช่างผู้รับผิดชอบ**")
+                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('assignee','—')}</p>", unsafe_allow_html=True)
+
+                st.divider()
+                st.markdown("**📝 อาการที่แจ้ง**")
+                st.info(row.get('desc','—'))
+                if pd.notna(row.get('root_cause')) and row.get('root_cause'):
+                    st.markdown("**🔍 สาเหตุ**")
+                    st.info(row.get('root_cause'))
+                if pd.notna(row.get('solution')) and row.get('solution'):
+                    st.markdown("**✅ วิธีแก้ไข**")
+                    st.success(row.get('solution'))
+                cost_val = row.get('cost', 0)
+                try: cost_val = float(cost_val)
+                except: cost_val = 0.0
+                if cost_val > 0:
+                    st.markdown(f"**💰 ค่าใช้จ่าย:** `฿{cost_val:,.2f}`")
+                if pd.notna(rating_val):
+                    st.markdown(f"**⭐ คะแนนประเมิน:** {stars} `({float(rating_val):.1f}/5.0)`")
+                if pd.notna(row.get('feedback')) and row.get('feedback'):
+                    st.markdown("**💬 ข้อเสนอแนะ**")
+                    st.markdown(f"<p style='color:#8BA0BC;font-style:italic;'>\"{row.get('feedback')}\"</p>", unsafe_allow_html=True)
+
+            # ── Render Cards ──
+            for _, row in df_sorted.iterrows():
+                status_cls  = f"status-{row['status']}"
+                urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
+                rating_val  = row.get('rating')
+                rating_html = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else '<span style="color:#4A6080;font-size:11px;">รอประเมิน</span>'
+                col_card, col_btn = st.columns([11, 1])
+                with col_card:
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div class="ticket-card-left">
+                            <div class="ticket-id">{row['id']}</div>
+                            <div class="ticket-user">{row.get('user','')}</div>
+                            <div class="ticket-date">{row.get('date','')}</div>
+                        </div>
+                        <div class="ticket-card-mid">
+                            <div class="ticket-cat">📂 {row.get('category','')} &nbsp;|&nbsp; 🖥️ {row.get('equipment_type','')}</div>
+                            <div class="ticket-cat" style="margin-top:4px;">🏢 {row.get('dept','')}</div>
+                            <div class="{urgency_cls}" style="margin-top:4px;">⚡ {row.get('urgency','')}</div>
+                        </div>
+                        <div class="ticket-card-right">
+                            <div><span class="status-badge {status_cls}">{row['status']}</span></div>
+                            <div class="ticket-rating" style="margin-top:8px;">{rating_html}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_btn:
+                    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+                    if st.button("🔍", key=f"view_{row['id']}", help="ดูรายละเอียด", use_container_width=True):
+                        show_ticket_detail(row)
         else:
             st.info("ยังไม่มีข้อมูลงานซ่อม")
 
@@ -554,55 +616,130 @@ if page == "📝 แจ้งซ่อม (User)":
 # หน้า 2: จัดการงานซ่อม
 # ==========================================
 elif page == "💻 จัดการงานซ่อม (ช่าง)" and st.session_state.is_admin:
-    st.header("💻 จัดการงานซ่อม (เฉพาะงานที่รอดำเนินการ)")
+    st.header("💻 จัดการงานซ่อม")
     df_tickets = load_table("tickets")
     if not df_tickets.empty:
         df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
         if not df_pending.empty:
-            view_cols = ['id','date','user','dept','category','status']
-            rename_dict = {'id':'รหัสงาน','date':'วันที่แจ้ง','user':'ผู้แจ้ง','dept':'แผนก','category':'ประเภท','status':'สถานะ'}
-            if 'location' in df_pending.columns:
-                view_cols.insert(4,'location'); rename_dict['location'] = 'สถานที่ตั้ง'
-            df_manage_view = df_pending[view_cols].copy()
-            df_manage_view.rename(columns=rename_dict, inplace=True)
-            def color_status(val):
-                if val == 'รอตรวจสอบ': return 'background-color:#1a1a2e;color:#FCA5A5;font-weight:bold'
-                elif val == 'ดำเนินการ': return 'background-color:#1a1a2e;color:#FCD34D;font-weight:bold'
-                elif val == 'ส่งซ่อม': return 'background-color:#1a1a2e;color:#C4B5FD;font-weight:bold'
-                return ''
-            st.dataframe(df_manage_view.style.map(color_status, subset=['สถานะ']), use_container_width=True, hide_index=True)
-            st.divider()
-            st.subheader("🔧 อัปเดตรายละเอียดและปิดงาน")
-            selected_id = st.selectbox("เลือกรหัสงานที่ต้องการจัดการ", df_pending['id'].tolist())
-            tk = df_pending[df_pending['id'] == selected_id].iloc[0]
-            try:
-                img_res = supabase.table("tickets").select("image_path").eq("id", selected_id).execute()
-                img_path = img_res.data[0].get('image_path','') if img_res.data else ''
-            except: img_path = ''
-            pdf_bytes = generate_repair_pdf(tk, img_path)
-            st.download_button(label="📥 ดาวน์โหลดใบงานซ่อม (PDF)", data=pdf_bytes, file_name=f"Service_Report_{selected_id}.pdf", mime="application/pdf")
-            with st.form("edit_job_form"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.info(f"**📍 สถานที่ตั้ง:** {tk.get('location','ไม่ได้ระบุ')}")
-                    st.info(f"**อาการที่แจ้ง:** {tk.get('desc','')}")
-                    st.info(f"**ประเภทอุปกรณ์:** {tk.get('equipment_type','ไม่ได้ระบุ')}")
-                    st.info(f"**ประเภทงาน:** {tk.get('category','')}")
-                    if img_path and str(img_path).startswith('data:image'):
-                        try: st.image(img_path, caption="รูปประกอบ", width=400)
-                        except: st.error("ไม่สามารถแสดงรูปภาพได้")
-                    n_status = st.selectbox("สถานะปัจจุบัน", ticket_statuses, index=ticket_statuses.index(tk['status']))
-                    assignee = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
-                with c2:
-                    root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') or "")
-                    sol = st.text_area("วิธีการแก้ไข", value=tk.get('solution') or "")
-                    cost = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost') or 0.0))
-                if st.form_submit_button("บันทึกข้อมูลงานซ่อม"):
-                    update_ticket_full(selected_id, n_status, assignee, root, sol, cost)
-                    st.toast(f"บันทึกงาน {selected_id} สำเร็จ!", icon="✅")
-                    st.success("อัปเดตสถานะเรียบร้อยแล้ว"); st.rerun()
-        else: st.success("🎉 ยอดเยี่ยม! ขณะนี้ไม่มีงานซ่อมค้างในระบบ")
-    else: st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
+            sort_map = {'รอตรวจสอบ':1,'ดำเนินการ':2,'ส่งซ่อม':3}
+            df_pending['_sort'] = df_pending['status'].map(sort_map).fillna(9)
+            df_pending = df_pending.sort_values(by=['_sort','date'], ascending=[True,False])
+
+            st.markdown(f"<p style='color:#8BA0BC;margin-bottom:16px;'>งานรอดำเนินการทั้งหมด <b style='color:#E8EDF5;'>{len(df_pending)}</b> รายการ — คลิกที่การ์ดเพื่อแก้ไข</p>", unsafe_allow_html=True)
+
+            # ── Dialog: แก้ไขได้ + PDF ──
+            @st.dialog("🔧 จัดการงานซ่อม", width="large")
+            def edit_ticket_dialog(tk):
+                tid = tk['id']
+
+                # ดึงรูปครั้งเดียว
+                try:
+                    img_res = supabase.table("tickets").select("image_path").eq("id", tid).execute()
+                    img_path = img_res.data[0].get('image_path','') if img_res.data else ''
+                except:
+                    img_path = ''
+
+                # Header
+                status_cls = f"status-{tk['status']}"
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div>
+                    <span style="font-family:'DM Mono',monospace;font-size:14px;color:#00C6FF;">{tid}</span>
+                    <span style="margin-left:12px;" class="status-badge {status_cls}">{tk['status']}</span>
+                  </div>
+                  <div style="font-size:12px;color:#4A6080;">{tk.get('date','')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # ข้อมูลอ่านอย่างเดียว
+                ci1, ci2 = st.columns(2)
+                with ci1:
+                    st.markdown(f"**👤 ผู้แจ้ง:** {tk.get('user','—')}")
+                    st.markdown(f"**🏢 แผนก:** {tk.get('dept','—')}")
+                    st.markdown(f"**📍 สถานที่:** {tk.get('location','—')}")
+                    st.markdown(f"**🖥️ อุปกรณ์:** {tk.get('equipment_type','—')}  `{tk.get('asset_id','')}`")
+                with ci2:
+                    st.markdown(f"**📂 ประเภท:** {tk.get('category','—')}")
+                    st.markdown(f"**⚡ ความเร่งด่วน:** {tk.get('urgency','—')}")
+
+                st.markdown("**📝 อาการที่แจ้ง**")
+                st.info(tk.get('desc','—'))
+
+                if img_path and str(img_path).startswith('data:image'):
+                    try: st.image(img_path, caption="รูปประกอบ", width=360)
+                    except: pass
+
+                st.divider()
+                st.markdown("**✏️ บันทึกการซ่อม**")
+
+                # ── Form แก้ไข ──
+                with st.form(f"edit_form_{tid}"):
+                    fa, fb = st.columns(2)
+                    with fa:
+                        n_status  = st.selectbox("สถานะ", ticket_statuses, index=ticket_statuses.index(tk['status']))
+                        assignee  = st.text_input("ช่างผู้รับผิดชอบ", value=tk.get('assignee') or "")
+                        cost      = st.number_input("ค่าใช้จ่าย (บาท)", value=float(tk.get('cost') or 0.0), min_value=0.0)
+                    with fb:
+                        root = st.text_area("สาเหตุของปัญหา", value=tk.get('root_cause') or "", height=100)
+                        sol  = st.text_area("วิธีการแก้ไข",   value=tk.get('solution')   or "", height=100)
+
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        save_btn = st.form_submit_button("💾 บันทึก", use_container_width=True)
+                    with sc2:
+                        # PDF ต้องอยู่นอก form จึงสร้างก่อน
+                        pass
+
+                    if save_btn:
+                        update_ticket_full(tid, n_status, assignee, root, sol, cost)
+                        st.toast(f"บันทึกงาน {tid} สำเร็จ!", icon="✅")
+                        st.rerun()
+
+                # ปุ่ม PDF อยู่นอก form
+                pdf_tk = tk.copy()
+                pdf_bytes = generate_repair_pdf(pdf_tk, img_path)
+                st.download_button(
+                    label="📥 ดาวน์โหลดใบงานซ่อม (PDF)",
+                    data=pdf_bytes,
+                    file_name=f"Service_Report_{tid}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key=f"pdf_{tid}"
+                )
+
+            # ── Render Cards ──
+            for _, row in df_pending.iterrows():
+                status_cls  = f"status-{row['status']}"
+                urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
+                col_card, col_btn = st.columns([11, 1])
+                with col_card:
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div class="ticket-card-left">
+                            <div class="ticket-id">{row['id']}</div>
+                            <div class="ticket-user">{row.get('user','')}</div>
+                            <div class="ticket-date">{row.get('date','')}</div>
+                        </div>
+                        <div class="ticket-card-mid">
+                            <div class="ticket-cat">📂 {row.get('category','')} &nbsp;|&nbsp; 🖥️ {row.get('equipment_type','')}</div>
+                            <div class="ticket-cat" style="margin-top:4px;">🏢 {row.get('dept','')} &nbsp;|&nbsp; 📍 {row.get('location','—')}</div>
+                            <div class="{urgency_cls}" style="margin-top:4px;">⚡ {row.get('urgency','')}</div>
+                        </div>
+                        <div class="ticket-card-right">
+                            <div><span class="status-badge {status_cls}">{row['status']}</span></div>
+                            <div style="font-size:11px;color:#4A6080;margin-top:6px;">{row.get('assignee','ยังไม่มอบหมาย')}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_btn:
+                    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+                    if st.button("✏️", key=f"edit_{row['id']}", help="แก้ไขงาน", use_container_width=True):
+                        edit_ticket_dialog(row)
+
+        else:
+            st.success("🎉 ยอดเยี่ยม! ขณะนี้ไม่มีงานซ่อมค้างในระบบ")
+    else:
+        st.info("ยังไม่มีข้อมูลงานซ่อมในระบบ")
 
 # ==========================================
 # หน้า 3: Dashboard
