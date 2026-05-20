@@ -302,6 +302,12 @@ hr { border: none !important; border-top: 1px solid var(--border) !important; ma
 [data-baseweb="menu"] { background: var(--navy-mid) !important; }
 [data-baseweb="option"] { background: var(--navy-mid) !important; color: var(--text-primary) !important; }
 [data-baseweb="option"]:hover { background: var(--navy-light) !important; }
+
+/* ── ซ่อน Streamlit menu / theme switcher / footer ── */
+#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden !important; height: 0 !important; }
+[data-testid="stToolbar"] { display: none !important; }
+[data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -457,7 +463,89 @@ page = _page_map.get(page_label, "📝 แจ้งซ่อม (User)")
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
     st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
-    tab1, tab2 = st.tabs(["🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
+    tab_status, tab1, tab2 = st.tabs(["📋 ตรวจสอบสถานะงานซ่อม", "🆕 ส่งใบแจ้งซ่อม", "⭐ ประเมินความพึงพอใจ"])
+
+    with tab_status:
+        df_tickets = load_table("tickets")
+        if not df_tickets.empty:
+            sort_map = {'รอตรวจสอบ':1,'ดำเนินการ':2,'ส่งซ่อม':3,'สำเร็จ':4}
+            df_tickets['_sort'] = df_tickets['status'].map(sort_map)
+            df_sorted = df_tickets.sort_values(by=['_sort','date'], ascending=[True,False])
+
+            @st.dialog("📋 รายละเอียดงานซ่อม", width="large")
+            def show_ticket_detail(row):
+                status_cls = f"status-{row['status']}"
+                rating_val = row.get('rating')
+                stars = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else "รอประเมิน"
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div>
+                    <span style="font-family:'DM Mono',monospace;font-size:13px;color:#00C6FF;">{row['id']}</span>
+                    <span style="margin-left:12px;" class="status-badge {status_cls}">{row['status']}</span>
+                  </div>
+                  <div style="font-size:12px;color:#4A6080;">{row.get('date','')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"**👤 ผู้แจ้ง:** {row.get('user','—')}")
+                    st.markdown(f"**🏢 แผนก:** {row.get('dept','—')}")
+                    st.markdown(f"**📍 สถานที่ตั้ง:** {row.get('location','—')}")
+                    st.markdown(f"**⚡ ความเร่งด่วน:** {row.get('urgency','—')}")
+                with c2:
+                    st.markdown(f"**🖥️ ประเภทอุปกรณ์:** {row.get('equipment_type','—')}")
+                    st.markdown(f"**🔖 รหัสทรัพย์สิน:** `{row.get('asset_id','—')}`")
+                    st.markdown(f"**📂 ประเภทงาน:** {row.get('category','—')}")
+                    st.markdown(f"**🔧 ช่างผู้รับผิดชอบ:** {row.get('assignee','—')}")
+                st.divider()
+                st.markdown("**📝 อาการที่แจ้ง**")
+                st.info(row.get('desc','—'))
+                if pd.notna(row.get('root_cause')) and row.get('root_cause'):
+                    st.markdown("**🔍 สาเหตุ**"); st.info(row.get('root_cause'))
+                if pd.notna(row.get('solution')) and row.get('solution'):
+                    st.markdown("**✅ วิธีแก้ไข**"); st.success(row.get('solution'))
+                cost_val = row.get('cost',0)
+                try: cost_val = float(cost_val)
+                except: cost_val = 0.0
+                if cost_val > 0:
+                    st.markdown(f"**💰 ค่าใช้จ่าย:** `฿{cost_val:,.2f}`")
+                if pd.notna(rating_val):
+                    st.markdown(f"**⭐ คะแนนประเมิน:** {stars} `({float(rating_val):.1f}/5.0)`")
+                if pd.notna(row.get('feedback')) and row.get('feedback'):
+                    st.markdown("**💬 ข้อเสนอแนะ**")
+                    st.markdown(f"<p style='color:#8BA0BC;font-style:italic;'>\"{row.get('feedback')}\"</p>", unsafe_allow_html=True)
+
+            for _, row in df_sorted.iterrows():
+                status_cls  = f"status-{row['status']}"
+                urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
+                rating_val  = row.get('rating')
+                rating_html = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else '<span style="color:#4A6080;font-size:11px;">รอประเมิน</span>'
+                col_card, col_btn = st.columns([11, 1])
+                with col_card:
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div class="ticket-card-left">
+                            <div class="ticket-id">{row['id']}</div>
+                            <div class="ticket-user">{row.get('user','')}</div>
+                            <div class="ticket-date">{row.get('date','')}</div>
+                        </div>
+                        <div class="ticket-card-mid">
+                            <div class="ticket-cat">📂 {row.get('category','')} &nbsp;|&nbsp; 🖥️ {row.get('equipment_type','')}</div>
+                            <div class="ticket-cat" style="margin-top:4px;">🏢 {row.get('dept','')}</div>
+                            <div class="{urgency_cls}" style="margin-top:4px;">⚡ {row.get('urgency','')}</div>
+                        </div>
+                        <div class="ticket-card-right">
+                            <div><span class="status-badge {status_cls}">{row['status']}</span></div>
+                            <div class="ticket-rating" style="margin-top:8px;">{rating_html}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_btn:
+                    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+                    if st.button("🔍", key=f"view_{row['id']}", help="ดูรายละเอียด", use_container_width=True):
+                        show_ticket_detail(row)
+        else:
+            st.info("ยังไม่มีข้อมูลงานซ่อม")
 
     with tab1:
         with st.form("ticket_form"):
@@ -496,103 +584,6 @@ if page == "📝 แจ้งซ่อม (User)":
                 else:
                     st.error("❌ กรุณาระบุชื่อผู้แจ้ง, แผนก และรายละเอียดปัญหา")
 
-        st.divider()
-        st.subheader("📋 ตรวจสอบสถานะงานซ่อม")
-        df_tickets = load_table("tickets")
-        if not df_tickets.empty:
-            sort_map = {'รอตรวจสอบ':1,'ดำเนินการ':2,'ส่งซ่อม':3,'สำเร็จ':4}
-            df_tickets['_sort'] = df_tickets['status'].map(sort_map)
-            df_sorted = df_tickets.sort_values(by=['_sort','date'], ascending=[True,False])
-
-            # ── Dialog: แสดงรายละเอียด (อ่านอย่างเดียว) ──
-            @st.dialog("📋 รายละเอียดงานซ่อม", width="large")
-            def show_ticket_detail(row):
-                status_cls = f"status-{row['status']}"
-                rating_val = row.get('rating')
-                stars = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else "รอประเมิน"
-                st.markdown(f"""
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                  <div>
-                    <span style="font-family:'DM Mono',monospace;font-size:13px;color:#00C6FF;">{row['id']}</span>
-                    <span style="margin-left:12px;" class="status-badge {status_cls}">{row['status']}</span>
-                  </div>
-                  <div style="font-size:12px;color:#4A6080;">{row.get('date','')}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("**👤 ผู้แจ้ง**")
-                    st.markdown(f"<p style='color:#E8EDF5;font-size:15px;'>{row.get('user','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**🏢 แผนก**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('dept','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**📍 สถานที่ตั้ง**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('location','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**⚡ ความเร่งด่วน**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('urgency','—')}</p>", unsafe_allow_html=True)
-                with c2:
-                    st.markdown("**🖥️ ประเภทอุปกรณ์**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('equipment_type','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**🔖 รหัสทรัพย์สิน**")
-                    st.markdown(f"<p style='color:#E8EDF5;font-family:DM Mono,monospace;'>{row.get('asset_id','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**📂 ประเภทงาน**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('category','—')}</p>", unsafe_allow_html=True)
-                    st.markdown("**🔧 ช่างผู้รับผิดชอบ**")
-                    st.markdown(f"<p style='color:#E8EDF5;'>{row.get('assignee','—')}</p>", unsafe_allow_html=True)
-
-                st.divider()
-                st.markdown("**📝 อาการที่แจ้ง**")
-                st.info(row.get('desc','—'))
-                if pd.notna(row.get('root_cause')) and row.get('root_cause'):
-                    st.markdown("**🔍 สาเหตุ**")
-                    st.info(row.get('root_cause'))
-                if pd.notna(row.get('solution')) and row.get('solution'):
-                    st.markdown("**✅ วิธีแก้ไข**")
-                    st.success(row.get('solution'))
-                cost_val = row.get('cost', 0)
-                try: cost_val = float(cost_val)
-                except: cost_val = 0.0
-                if cost_val > 0:
-                    st.markdown(f"**💰 ค่าใช้จ่าย:** `฿{cost_val:,.2f}`")
-                if pd.notna(rating_val):
-                    st.markdown(f"**⭐ คะแนนประเมิน:** {stars} `({float(rating_val):.1f}/5.0)`")
-                if pd.notna(row.get('feedback')) and row.get('feedback'):
-                    st.markdown("**💬 ข้อเสนอแนะ**")
-                    st.markdown(f"<p style='color:#8BA0BC;font-style:italic;'>\"{row.get('feedback')}\"</p>", unsafe_allow_html=True)
-
-            # ── Render Cards ──
-            for _, row in df_sorted.iterrows():
-                status_cls  = f"status-{row['status']}"
-                urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
-                rating_val  = row.get('rating')
-                rating_html = "⭐" * int(round(float(rating_val))) if pd.notna(rating_val) else '<span style="color:#4A6080;font-size:11px;">รอประเมิน</span>'
-                col_card, col_btn = st.columns([11, 1])
-                with col_card:
-                    st.markdown(f"""
-                    <div class="ticket-card">
-                        <div class="ticket-card-left">
-                            <div class="ticket-id">{row['id']}</div>
-                            <div class="ticket-user">{row.get('user','')}</div>
-                            <div class="ticket-date">{row.get('date','')}</div>
-                        </div>
-                        <div class="ticket-card-mid">
-                            <div class="ticket-cat">📂 {row.get('category','')} &nbsp;|&nbsp; 🖥️ {row.get('equipment_type','')}</div>
-                            <div class="ticket-cat" style="margin-top:4px;">🏢 {row.get('dept','')}</div>
-                            <div class="{urgency_cls}" style="margin-top:4px;">⚡ {row.get('urgency','')}</div>
-                        </div>
-                        <div class="ticket-card-right">
-                            <div><span class="status-badge {status_cls}">{row['status']}</span></div>
-                            <div class="ticket-rating" style="margin-top:8px;">{rating_html}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with col_btn:
-                    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-                    if st.button("🔍", key=f"view_{row['id']}", help="ดูรายละเอียด", use_container_width=True):
-                        show_ticket_detail(row)
-        else:
-            st.info("ยังไม่มีข้อมูลงานซ่อม")
-
     with tab2:
         st.subheader("งานซ่อมที่รอการประเมิน")
         df_all = load_table("tickets")
@@ -619,6 +610,18 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
     st.header("💻 จัดการงานซ่อม")
     df_tickets = load_table("tickets")
     if not df_tickets.empty:
+        # ── Mini Dashboard ──
+        total   = len(df_tickets)
+        done    = len(df_tickets[df_tickets['status'] == 'สำเร็จ'])
+        pending = len(df_tickets[df_tickets['status'] == 'รอตรวจสอบ'])
+        wip     = len(df_tickets[df_tickets['status'].isin(['ดำเนินการ','ส่งซ่อม'])])
+        done_rate = (done/total*100) if total > 0 else 0
+        md1, md2, md3, md4 = st.columns(4)
+        with md1: st.metric("📋 งานแจ้งซ่อมทั้งหมด", total)
+        with md2: st.metric("✅ ปิดงานสำเร็จ", f"{done} งาน", f"{done_rate:.1f}%")
+        with md3: st.metric("⏳ กำลังดำเนินการ", f"{wip} งาน")
+        with md4: st.metric("🔴 งานค้าง (รอตรวจสอบ)", pending, delta=f"{pending} งาน" if pending else "ไม่มี", delta_color="inverse")
+        st.divider()
         df_pending = df_tickets[df_tickets['status'] != 'สำเร็จ'].copy()
         if not df_pending.empty:
             sort_map = {'รอตรวจสอบ':1,'ดำเนินการ':2,'ส่งซ่อม':3}
@@ -970,6 +973,22 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
 
     df_a = load_table("assets"); df_t = load_table("tickets")
     st.divider()
+
+    # ── Export CSV ──
+    if not df_a.empty:
+        ea1, ea2 = st.columns([8,2])
+        with ea1:
+            st.markdown(f"<p style='color:#8BA0BC;'>อุปกรณ์ทั้งหมดในระบบ <b style='color:#E8EDF5;'>{len(df_a)}</b> รายการ</p>", unsafe_allow_html=True)
+        with ea2:
+            csv_data = df_a.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Export CSV",
+                data=csv_data,
+                file_name=f"IT_Assets_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
     search_query = st.text_input("🔍 ตรวจสอบประวัติเครื่องรายอุปกรณ์", placeholder="พิมพ์ Asset ID...")
     if search_query and not df_a.empty:
         match = df_a[df_a['id'].str.contains(search_query, case=False, na=False)]
@@ -1030,33 +1049,178 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
     df_pm = load_table("pm_schedules")
 
     with tab_cal:
-        st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
         if not df_pm.empty:
+            # ── คำนวณสถิติ + ตรวจสอบ Overdue ──
+            today = datetime.now().date()
+            df_pm['_due'] = pd.to_datetime(df_pm['next_due_date']).dt.date
+            df_pm['_overdue'] = (df_pm['_due'] < today) & (df_pm['status'] != 'Completed')
+
+            current_month_str = datetime.now().strftime('%Y-%m')
+            df_pm['_month'] = pd.to_datetime(df_pm['next_due_date']).dt.strftime('%Y-%m')
+
+            month_total    = len(df_pm[df_pm['_month'] == current_month_str])
+            month_done     = len(df_pm[(df_pm['_month'] == current_month_str) & (df_pm['status'] == 'Completed')])
+            month_pending  = month_total - month_done
+            overdue_count  = int(df_pm['_overdue'].sum())
+
+            # ── Mini Stats ──
+            ms1, ms2, ms3, ms4 = st.columns(4)
+            with ms1: st.metric("📅 แผนเดือนนี้", f"{month_total} งาน")
+            with ms2: st.metric("✅ เสร็จแล้ว", f"{month_done} งาน")
+            with ms3: st.metric("🔄 รอดำเนินการ", f"{month_pending} งาน")
+            with ms4: st.metric("🚨 เลยกำหนด", f"{overdue_count} งาน",
+                                delta=f"{overdue_count} งาน" if overdue_count else "ไม่มี",
+                                delta_color="inverse")
+
+            # ── Overdue Alert ──
+            if overdue_count > 0:
+                overdue_list = df_pm[df_pm['_overdue']].sort_values('_due')
+                items_html = ""
+                for _, ov in overdue_list.head(5).iterrows():
+                    days = (today - ov['_due']).days
+                    items_html += f"""<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(239,68,68,0.15);">
+                      <span style="color:#FCA5A5;font-size:13px;">⚠️ <b>{ov['task_name']}</b> ({ov.get('assignee','—')})</span>
+                      <span style="color:#FCA5A5;font-family:'DM Mono',monospace;font-size:12px;">เลย {days} วัน</span>
+                    </div>"""
+                more = f"<div style='margin-top:6px;color:#FCA5A5;font-size:12px;'>... และอีก {len(overdue_list)-5} งาน</div>" if len(overdue_list) > 5 else ""
+                st.markdown(f"""
+                <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.4);
+                  border-radius:12px;padding:14px 18px;margin:14px 0;">
+                  <div style="font-weight:700;color:#FCA5A5;margin-bottom:8px;font-size:14px;">
+                    🚨 มีงาน PM เลยกำหนด {overdue_count} รายการ — กรุณาตรวจสอบ
+                  </div>
+                  {items_html}{more}
+                </div>
+                """, unsafe_allow_html=True)
+
+            # ── Filter ──
+            with st.expander("🔍 กรองข้อมูลปฏิทิน", expanded=False):
+                fc1, fc2, fc3 = st.columns(3)
+                with fc1:
+                    assignees = ["ทั้งหมด"] + sorted(df_pm['assignee'].dropna().unique().tolist())
+                    f_assignee = st.selectbox("👷 ผู้รับผิดชอบ", assignees, key="pm_filter_assignee")
+                with fc2:
+                    eq_types_list = ["ทั้งหมด"] + sorted(df_pm['equipment_type'].dropna().unique().tolist()) if 'equipment_type' in df_pm.columns else ["ทั้งหมด"]
+                    f_eqtype = st.selectbox("🖥️ ประเภทอุปกรณ์", eq_types_list, key="pm_filter_eqtype")
+                with fc3:
+                    f_status = st.selectbox("📌 สถานะ", ["ทั้งหมด","รอดำเนินการ","เสร็จสิ้น","เลยกำหนด"], key="pm_filter_status")
+
+            # apply filter
+            df_view = df_pm.copy()
+            if f_assignee != "ทั้งหมด": df_view = df_view[df_view['assignee'] == f_assignee]
+            if f_eqtype != "ทั้งหมด" and 'equipment_type' in df_view.columns: df_view = df_view[df_view['equipment_type'] == f_eqtype]
+            if f_status == "รอดำเนินการ": df_view = df_view[df_view['status'] != 'Completed']
+            elif f_status == "เสร็จสิ้น": df_view = df_view[df_view['status'] == 'Completed']
+            elif f_status == "เลยกำหนด": df_view = df_view[df_view['_overdue']]
+
+            # ── Export Schedule ──
+            ec1, ec2, _ = st.columns([1,1,3])
+            with ec1:
+                csv_pm = df_view.drop(columns=['_due','_overdue','_month'], errors='ignore').to_csv(index=False).encode('utf-8-sig')
+                st.download_button("📤 Export ตาราง (CSV)", csv_pm,
+                    file_name=f"PM_Schedule_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv", use_container_width=True)
+            with ec2:
+                if st.button("🔄 รีเฟรช", use_container_width=True):
+                    st.rerun()
+
+            st.divider()
+            st.subheader("📅 ตารางงานบำรุงรักษาประจำเดือน")
+
+            # ── สร้าง events พร้อมสี Overdue ──
             calendar_events = []
-            for _, row in df_pm.iterrows():
+            for _, row in df_view.iterrows():
                 try:
                     due_date = pd.to_datetime(row['next_due_date']).strftime('%Y-%m-%d')
-                    calendar_events.append({"id":str(row['id']),"title":f"🛠️ {row['task_name']}","start":due_date,"end":due_date,"color":"#10B981" if row['status']=="Completed" else "#1E6FD9","allDay":True})
+                    is_done = row['status'] == "Completed"
+                    is_overdue = row.get('_overdue', False)
+                    if is_done:
+                        col, border = "#059669", "#10B981"; icon = "✅"
+                    elif is_overdue:
+                        col, border = "#DC2626", "#EF4444"; icon = "🚨"
+                    else:
+                        col, border = "#1E6FD9", "#3B8FFF"; icon = "🔧"
+                    calendar_events.append({
+                        "id": str(row['id']),
+                        "title": f"{icon} {row['task_name']}",
+                        "start": due_date, "end": due_date,
+                        "color": col, "borderColor": border,
+                        "textColor": "#ffffff", "allDay": True,
+                    })
                 except: continue
-            cal_action = calendar(events=calendar_events, options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth,dayGridWeek"},"initialView":"dayGridMonth","selectable":True}, key=f"pm_calendar_{len(calendar_events)}")
-            if cal_action and "callback" in cal_action and cal_action["callback"] == "eventClick":
-                event_id = cal_action["eventClick"]["event"]["id"]
-                clicked_event = df_pm[df_pm['id'] == event_id]
-                if not clicked_event.empty:
-                    target = clicked_event.iloc[0]
-                    st.markdown("---")
-                    st.markdown(f"### 📌 รายละเอียดงาน: {target['task_name']}")
-                    ci1, ci2 = st.columns(2)
-                    with ci1:
-                        st.write(f"**รหัสอุปกรณ์:** {target.get('asset_id','N/A')}")
-                        st.write(f"**วันที่กำหนด:** {target['next_due_date']}")
-                    with ci2:
-                        st.write(f"**ผู้รับผิดชอบ:** {target.get('assignee','N/A')}")
-                        st.write(f"**สถานะ:** {'🟢 เสร็จสิ้น' if target['status']=='Completed' else '🟡 รอทำ'}")
-                    st.info(f"**📝 Checklist:**\n\n{target.get('checklist','ไม่มีข้อมูล')}")
-                    if target['status'] == "Completed" and pd.notna(target.get('pm_result')):
-                        st.success(f"**✅ ผลตรวจสอบ:**\n\n{target['pm_result']}")
-        else: st.info("💡 ยังไม่มีข้อมูลแผนงาน PM")
+
+            st.markdown("""
+            <style>
+            .fc { font-family: 'Noto Sans Thai', sans-serif !important; }
+            .fc-toolbar-title { font-size:16px !important; font-weight:700 !important; color:#E8EDF5 !important; }
+            .fc-button { background:#1E6FD9 !important; border-color:#3B8FFF !important; border-radius:6px !important; font-size:12px !important; }
+            .fc-button:hover { background:#3B8FFF !important; }
+            .fc-button-active { background:#1557B0 !important; }
+            .fc-daygrid-day { background:rgba(17,34,64,0.6) !important; border-color:rgba(30,111,217,0.15) !important; }
+            .fc-daygrid-day:hover { background:rgba(30,111,217,0.12) !important; }
+            .fc-day-today { background:rgba(30,111,217,0.2) !important; }
+            .fc-col-header-cell { background:rgba(17,34,64,0.9) !important; color:#8BA0BC !important; font-size:12px !important; font-weight:600 !important; }
+            .fc-daygrid-day-number { color:#8BA0BC !important; font-size:12px !important; }
+            .fc-event { border-radius:6px !important; padding:2px 6px !important; font-size:11px !important; cursor:pointer !important; }
+            .fc-event:hover { opacity:0.85 !important; }
+            .fc-more-link { color:#00C6FF !important; font-size:11px !important; }
+            </style>""", unsafe_allow_html=True)
+
+            @st.dialog("📌 รายละเอียดงาน PM", width="large")
+            def show_pm_detail(target):
+                is_done = target['status'] == "Completed"
+                sc = "#10B981" if is_done else "#F59E0B"
+                sl = "✅ เสร็จสิ้น" if is_done else "🔄 รอดำเนินการ"
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:16px;font-weight:700;color:#E8EDF5;">{target['task_name']}</div>
+                  <div style="background:{'rgba(16,185,129,0.15)' if is_done else 'rgba(245,158,11,0.15)'};
+                    color:{sc};border:1px solid {sc}50;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:600;">{sl}</div>
+                </div>""", unsafe_allow_html=True)
+                ci1, ci2 = st.columns(2)
+                with ci1:
+                    st.markdown(f"**🔖 รหัสอุปกรณ์:** `{target.get('asset_id','—')}`")
+                    st.markdown(f"**📅 วันที่กำหนด:** {target.get('next_due_date','—')}")
+                    st.markdown(f"**🔁 ความถี่:** {target.get('frequency','—')}")
+                with ci2:
+                    st.markdown(f"**👷 ผู้รับผิดชอบ:** {target.get('assignee','—')}")
+                    st.markdown(f"**🖥️ ประเภทอุปกรณ์:** {target.get('equipment_type','—')}")
+                st.divider()
+                st.markdown("**📝 Checklist**")
+                st.info(target.get('checklist','ไม่มีข้อมูล Checklist'))
+                if is_done and pd.notna(target.get('pm_result')):
+                    st.markdown("**✅ ผลการตรวจสอบ**"); st.success(target.get('pm_result'))
+                elif not is_done:
+                    st.divider()
+                    st.markdown("**📋 บันทึกผลการตรวจสอบ**")
+                    with st.form(f"pm_dialog_{target['id']}"):
+                        res = st.text_area("ผลการตรวจสอบ / ปัญหาที่พบ", placeholder="กรอกผลการตรวจสอบ...")
+                        if st.form_submit_button("✅ บันทึกและปิดงาน PM", use_container_width=True):
+                            update_pm_full(target['id'], "Completed", res)
+                            st.toast("บันทึกผล PM เรียบร้อยแล้ว!", icon="✅"); st.rerun()
+
+            cal_action = calendar(events=calendar_events, options={
+                "headerToolbar": {"left":"prev,next today","center":"title","right":"dayGridMonth,listMonth"},
+                "initialView": "dayGridMonth", "selectable": True, "editable": False,
+                "dayMaxEvents": 3, "height": 580,
+            }, key=f"pm_calendar_{len(calendar_events)}")
+
+            if cal_action and "callback" in cal_action:
+                cb = cal_action["callback"]
+                if cb == "eventClick":
+                    event_id = cal_action["eventClick"]["event"]["id"]
+                    ev = df_pm[df_pm['id'] == event_id]
+                    if not ev.empty: show_pm_detail(ev.iloc[0])
+
+            st.markdown("""
+            <div style="display:flex;gap:16px;margin-top:12px;font-size:12px;color:#8BA0BC;flex-wrap:wrap;">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#059669;border-radius:3px;margin-right:5px;vertical-align:middle;"></span>เสร็จสิ้น</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#1E6FD9;border-radius:3px;margin-right:5px;vertical-align:middle;"></span>รอดำเนินการ</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#DC2626;border-radius:3px;margin-right:5px;vertical-align:middle;"></span>เลยกำหนด</span>
+              <span style="color:#4A6080;margin-left:8px;">💡 คลิกชื่องานเพื่อดูรายละเอียดและบันทึกผล</span>
+            </div>""", unsafe_allow_html=True)
+        else:
+            st.info("💡 ยังไม่มีข้อมูลแผนงาน PM")
 
     with tab_list:
         if not df_pm.empty:
