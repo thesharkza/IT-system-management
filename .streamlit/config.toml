@@ -7,7 +7,9 @@ textColor = "#E8EDF5"
 font = "sans serif"
 
 [client]
-toolbarMode = "minimal"
+# viewer = ซ่อน toolbar นักพัฒนา แต่ยังแสดงปุ่ม sidebar collapse
+# (อย่าใช้ "minimal" เพราะจะซ่อน header ทั้งหมดรวมปุ่มเปิด sidebar)
+toolbarMode = "viewer"
 showSidebarNavigation = true
 
 [browser]
