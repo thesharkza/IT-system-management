@@ -15,7 +15,7 @@ st.set_page_config(
     page_title="ILT IT Helpdesk",
     page_icon="🛠️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
 st.markdown("""
@@ -304,10 +304,39 @@ hr { border: none !important; border-top: 1px solid var(--border) !important; ma
 [data-baseweb="option"]:hover { background: var(--navy-light) !important; }
 
 /* ── ซ่อน Streamlit menu / theme switcher / footer ── */
-#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden !important; height: 0 !important; }
+/* IMPORTANT: ไม่ซ่อน header ทั้งก้อนเพราะมี collapse-control ของ sidebar ในมือถือ */
+#MainMenu, footer { visibility: hidden !important; height: 0 !important; }
+header[data-testid="stHeader"] {
+    background: transparent !important;
+    height: 0 !important;
+    visibility: visible !important;
+}
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stStatusWidget"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
+
+/* ปุ่มเปิด sidebar บนมือถือ — บังคับให้เห็นตลอด */
+[data-testid="collapsedControl"],
+button[kind="header"],
+[data-testid="stSidebarCollapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+    background: rgba(30,111,217,0.9) !important;
+    border-radius: 8px !important;
+    color: #fff !important;
+    top: 12px !important;
+    left: 12px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+[data-testid="collapsedControl"] svg,
+button[kind="header"] svg {
+    color: #fff !important;
+    fill: #fff !important;
+    width: 22px !important;
+    height: 22px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
