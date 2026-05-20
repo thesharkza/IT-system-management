@@ -304,38 +304,53 @@ hr { border: none !important; border-top: 1px solid var(--border) !important; ma
 [data-baseweb="option"]:hover { background: var(--navy-light) !important; }
 
 /* ── ซ่อน Streamlit menu / theme switcher / footer ── */
-/* IMPORTANT: ไม่ซ่อน header ทั้งก้อนเพราะมี collapse-control ของ sidebar ในมือถือ */
+/* IMPORTANT: ไม่ซ่อน header ทั้งก้อนเพราะมี collapse-control ของ sidebar */
 #MainMenu, footer { visibility: hidden !important; height: 0 !important; }
 header[data-testid="stHeader"] {
     background: transparent !important;
-    height: 0 !important;
     visibility: visible !important;
 }
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stStatusWidget"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 
-/* ปุ่มเปิด sidebar บนมือถือ — บังคับให้เห็นตลอด */
+/* ปุ่มเปิด sidebar — สีส้มเด่น เห็นชัดเจน */
 [data-testid="collapsedControl"],
-button[kind="header"],
 [data-testid="stSidebarCollapsedControl"] {
     visibility: visible !important;
     display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     opacity: 1 !important;
     z-index: 999999 !important;
-    background: rgba(30,111,217,0.9) !important;
-    border-radius: 8px !important;
-    color: #fff !important;
-    top: 12px !important;
-    left: 12px !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+    background: linear-gradient(135deg, #F59E0B, #EA580C) !important;
+    border-radius: 10px !important;
+    color: #ffffff !important;
+    top: 14px !important;
+    left: 14px !important;
+    width: 44px !important;
+    height: 44px !important;
+    box-shadow: 0 4px 18px rgba(245,158,11,0.55), 0 0 0 3px rgba(245,158,11,0.18) !important;
+    border: none !important;
+    cursor: pointer !important;
+    animation: pulse-attention 2.2s ease-in-out infinite !important;
+}
+[data-testid="collapsedControl"]:hover,
+[data-testid="stSidebarCollapsedControl"]:hover {
+    transform: scale(1.08) !important;
+    box-shadow: 0 6px 24px rgba(245,158,11,0.7), 0 0 0 4px rgba(245,158,11,0.25) !important;
 }
 [data-testid="collapsedControl"] svg,
-button[kind="header"] svg {
-    color: #fff !important;
-    fill: #fff !important;
-    width: 22px !important;
-    height: 22px !important;
+[data-testid="stSidebarCollapsedControl"] svg {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+    width: 24px !important;
+    height: 24px !important;
+    stroke: #ffffff !important;
+}
+@keyframes pulse-attention {
+    0%, 100% { box-shadow: 0 4px 18px rgba(245,158,11,0.55), 0 0 0 3px rgba(245,158,11,0.18); }
+    50%      { box-shadow: 0 4px 22px rgba(245,158,11,0.75), 0 0 0 8px rgba(245,158,11,0.08); }
 }
 </style>
 """, unsafe_allow_html=True)
