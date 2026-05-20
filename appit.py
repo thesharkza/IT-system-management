@@ -560,6 +560,25 @@ st.sidebar.radio(
 
 page = st.session_state.active_page
 
+# ── Global Login Bar (อยู่บนสุด) ──
+login_col1, login_col2 = st.columns([3, 1])
+with login_col2:
+    if not st.session_state.is_admin:
+        with st.popover("🔐 IT Admin Login", use_container_width=True):
+            st.markdown("**เข้าสู่ระบบสำหรับผู้ดูแล**")
+            pwd_main = st.text_input("รหัสผ่าน", type="password", key="pwd_main", placeholder="Enter password", label_visibility="collapsed")
+            if st.button("เข้าสู่ระบบ", use_container_width=True, key="login_main"):
+                if pwd_main == ADMIN_PASSWORD:
+                    st.session_state.is_admin = True; st.rerun()
+                else:
+                    st.error("รหัสผ่านไม่ถูกต้อง")
+    else:
+        st.markdown("""
+        <div style="text-align:right;padding-top:6px;">
+          <span class="status-badge status-สำเร็จ">✓ IT Admin Mode</span>
+        </div>
+        """, unsafe_allow_html=True)
+
 # ── Top Navigation Bar ──
 nav_cols = st.columns(len(visible_menu))
 for i, (icon, label, key, _) in enumerate(visible_menu):
@@ -578,26 +597,7 @@ st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
 # หน้า 1: แจ้งซ่อม
 # ==========================================
 if page == "📝 แจ้งซ่อม (User)":
-    # ── Header bar: Title + Login button (เมื่อยังไม่ login) ──
-    hcol1, hcol2 = st.columns([5, 2])
-    with hcol1:
-        st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
-    with hcol2:
-        if not st.session_state.is_admin:
-            with st.popover("🔐 IT Admin Login", use_container_width=True):
-                st.markdown("**เข้าสู่ระบบสำหรับผู้ดูแล**")
-                pwd_main = st.text_input("รหัสผ่าน", type="password", key="pwd_main", placeholder="Enter password")
-                if st.button("เข้าสู่ระบบ", use_container_width=True, key="login_main"):
-                    if pwd_main == ADMIN_PASSWORD:
-                        st.session_state.is_admin = True; st.rerun()
-                    else: st.error("รหัสผ่านไม่ถูกต้อง")
-        else:
-            st.markdown("""
-            <div style="text-align:right;padding-top:18px;">
-              <span class="status-badge status-สำเร็จ">✓ IT Admin Mode</span>
-            </div>
-            """, unsafe_allow_html=True)
-
+    st.header("ระบบแจ้งซ่อมและติดตามงานออนไลน์")
     tab_status, tab1 = st.tabs(["📋 ตรวจสอบสถานะงานซ่อม", "🆕 ส่งใบแจ้งซ่อม"])
 
     with tab_status:
