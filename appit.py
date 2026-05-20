@@ -303,8 +303,7 @@ hr { border: none !important; border-top: 1px solid var(--border) !important; ma
 [data-baseweb="option"] { background: var(--navy-mid) !important; color: var(--text-primary) !important; }
 [data-baseweb="option"]:hover { background: var(--navy-light) !important; }
 
-/* ── ซ่อน Streamlit menu / theme switcher / footer ── */
-/* IMPORTANT: ไม่ซ่อน header ทั้งก้อนเพราะมี collapse-control ของ sidebar */
+/* ── ซ่อน Streamlit menu / footer ── */
 #MainMenu, footer { visibility: hidden !important; height: 0 !important; }
 header[data-testid="stHeader"] {
     background: transparent !important;
@@ -314,43 +313,58 @@ header[data-testid="stHeader"] {
 [data-testid="stStatusWidget"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 
-/* ปุ่มเปิด sidebar — สีส้มเด่น เห็นชัดเจน */
+/* ── ปุ่ม collapse ของ Streamlit (อาจมีหรือไม่มี ขึ้นกับเวอร์ชัน) ── */
 [data-testid="collapsedControl"],
-[data-testid="stSidebarCollapsedControl"] {
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+button[kind="headerNoPadding"] {
     visibility: visible !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     opacity: 1 !important;
-    z-index: 999999 !important;
+    z-index: 999998 !important;
     background: linear-gradient(135deg, #F59E0B, #EA580C) !important;
     border-radius: 10px !important;
     color: #ffffff !important;
-    top: 14px !important;
-    left: 14px !important;
-    width: 44px !important;
-    height: 44px !important;
-    box-shadow: 0 4px 18px rgba(245,158,11,0.55), 0 0 0 3px rgba(245,158,11,0.18) !important;
-    border: none !important;
-    cursor: pointer !important;
-    animation: pulse-attention 2.2s ease-in-out infinite !important;
-}
-[data-testid="collapsedControl"]:hover,
-[data-testid="stSidebarCollapsedControl"]:hover {
-    transform: scale(1.08) !important;
-    box-shadow: 0 6px 24px rgba(245,158,11,0.7), 0 0 0 4px rgba(245,158,11,0.25) !important;
+    box-shadow: 0 4px 18px rgba(245,158,11,0.55) !important;
 }
 [data-testid="collapsedControl"] svg,
 [data-testid="stSidebarCollapsedControl"] svg {
-    color: #ffffff !important;
-    fill: #ffffff !important;
-    width: 24px !important;
-    height: 24px !important;
-    stroke: #ffffff !important;
+    color: #fff !important; fill: #fff !important; stroke: #fff !important;
 }
-@keyframes pulse-attention {
+
+/* ── FAB Sidebar Toggle — ปุ่มสำรองที่ทำงานได้แน่ ── */
+#fab-sidebar-toggle {
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+    background: linear-gradient(135deg, #F59E0B, #EA580C) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    z-index: 999999 !important;
+    box-shadow: 0 4px 18px rgba(245,158,11,0.55), 0 0 0 3px rgba(245,158,11,0.18) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: transform 0.18s ease !important;
+    animation: pulse-fab 2.2s ease-in-out infinite !important;
+}
+#fab-sidebar-toggle:hover {
+    transform: scale(1.08) !important;
+    box-shadow: 0 6px 24px rgba(245,158,11,0.7) !important;
+}
+/* ซ่อนเมื่อ sidebar เปิดอยู่ */
+[data-testid="stSidebar"][aria-expanded="true"] ~ * #fab-sidebar-toggle,
+body:has([data-testid="stSidebar"]:not([aria-collapsed="true"])) #fab-sidebar-toggle {
+    /* fallback — ใช้ JS ควบคุมแทน */
+}
+@keyframes pulse-fab {
     0%, 100% { box-shadow: 0 4px 18px rgba(245,158,11,0.55), 0 0 0 3px rgba(245,158,11,0.18); }
-    50%      { box-shadow: 0 4px 22px rgba(245,158,11,0.75), 0 0 0 8px rgba(245,158,11,0.08); }
+    50%      { box-shadow: 0 4px 22px rgba(245,158,11,0.85), 0 0 0 10px rgba(245,158,11,0.08); }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -361,6 +375,55 @@ st.sidebar.markdown("""
   <p class="sidebar-brand-title">🛠️ ILT Helpdesk</p>
   <p class="sidebar-brand-sub">IT SERVICE MANAGEMENT</p>
 </div>
+""", unsafe_allow_html=True)
+
+# ── Floating Action Button (FAB) เปิด sidebar ── 
+# ใช้ JS ฉีดปุ่มเข้าไปใน body ตรงๆ และคลิกเปิด sidebar ด้วยการ trigger ปุ่ม
+# ของ Streamlit ที่ซ่อนอยู่ (รองรับทุกเวอร์ชัน)
+st.markdown("""
+<script>
+(function() {
+    function ensureFab() {
+        var doc = window.parent.document;
+        if (doc.getElementById('fab-sidebar-toggle')) return;
+
+        var fab = doc.createElement('button');
+        fab.id = 'fab-sidebar-toggle';
+        fab.innerHTML = '☰';
+        fab.title = 'เปิด/ปิด เมนู';
+        fab.onclick = function() {
+            // ลองหา collapse button หลายเวอร์ชัน
+            var btn = doc.querySelector('[data-testid="collapsedControl"] button')
+                   || doc.querySelector('[data-testid="stSidebarCollapsedControl"]')
+                   || doc.querySelector('[data-testid="stSidebarCollapseButton"]')
+                   || doc.querySelector('[data-testid="collapsedControl"]')
+                   || doc.querySelector('button[kind="headerNoPadding"]');
+            if (btn) { btn.click(); return; }
+            // fallback: toggle sidebar ด้วยการเปลี่ยน aria-expanded
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb) {
+                var collapsed = sb.getAttribute('aria-expanded') === 'false';
+                sb.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+            }
+        };
+        doc.body.appendChild(fab);
+
+        // ซ่อนปุ่ม FAB เมื่อ sidebar เปิด, แสดงเมื่อหุบ
+        function updateVisibility() {
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (!sb) { fab.style.display = 'flex'; return; }
+            var w = sb.getBoundingClientRect().width;
+            fab.style.display = (w > 100) ? 'none' : 'flex';
+        }
+        updateVisibility();
+        var obs = new MutationObserver(updateVisibility);
+        obs.observe(doc.body, { attributes:true, subtree:true, attributeFilter:['aria-expanded','style','class'] });
+        window.addEventListener('resize', updateVisibility);
+    }
+    // ลองหลายรอบเผื่อ DOM ยังโหลดไม่เสร็จ
+    for (var i = 0; i < 10; i++) setTimeout(ensureFab, i * 300);
+})();
+</script>
 """, unsafe_allow_html=True)
 
 # --- DATABASE SETUP ---
