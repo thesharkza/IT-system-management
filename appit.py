@@ -433,6 +433,14 @@ def update_asset(asset_id, data_dict):
 def delete_asset(asset_id):
     supabase.table("assets").delete().eq("id", asset_id).execute()
 
+def update_ticket_user_fields(ticket_id, data_dict):
+    """แก้ไขฟิลด์ที่ user มีสิทธิ์แก้ — เฉพาะงาน status='รอตรวจสอบ' เท่านั้น"""
+    supabase.table("tickets").update(data_dict).eq("id", ticket_id).eq("status", "รอตรวจสอบ").execute()
+
+def delete_ticket(ticket_id):
+    """ลบ ticket — เฉพาะงาน status='รอตรวจสอบ' เท่านั้น เพื่อความปลอดภัย"""
+    supabase.table("tickets").delete().eq("id", ticket_id).eq("status", "รอตรวจสอบ").execute()
+
 def _setup_thai_font(pdf):
     for family, filename in [("ThaiSarabun","THSarabunNew.ttf"),("ThaiPrompt","Prompt-Regular.ttf")]:
         if os.path.exists(filename):
@@ -689,6 +697,106 @@ if page == "📝 แจ้งซ่อม (User)":
                                 rating_scale[q4], rating_scale[q5], fb)
                             st.toast("ขอบคุณสำหรับการประเมิน!", icon="⭐")
                             st.rerun()
+
+                # ── ปุ่ม แก้ไข / ยกเลิก (เฉพาะงานสถานะ "รอตรวจสอบ") ──
+                if row['status'] == 'รอตรวจสอบ':
+                    st.divider()
+                    st.markdown("<p style='color:#8BA0BC;font-size:12px;margin-bottom:8px;'>💡 ขณะนี้ช่างยังไม่ได้รับงาน คุณสามารถแก้ไขหรือยกเลิกใบแจ้งซ่อมนี้ได้</p>", unsafe_allow_html=True)
+                    ub1, ub2 = st.columns(2)
+                    with ub1:
+                        if st.button("✏️ แก้ไขข้อมูล", use_container_width=True, key=f"user_edit_{row['id']}"):
+                            st.session_state[f"_edit_ticket_open_{row['id']}"] = True
+                            st.rerun()
+                    with ub2:
+                        if st.button("🗑️ ยกเลิกใบแจ้งซ่อม", use_container_width=True, key=f"user_cancel_{row['id']}"):
+                            st.session_state[f"_cancel_ticket_open_{row['id']}"] = True
+                            st.rerun()
+                elif row['status'] in ['ดำเนินการ', 'ส่งซ่อม']:
+                    st.divider()
+                    st.markdown("<p style='color:#FCD34D;font-size:12px;'>ℹ️ ช่างกำลังดำเนินการแล้ว ไม่สามารถแก้ไขหรือยกเลิกได้</p>", unsafe_allow_html=True)
+
+            # ── Dialog แก้ไข ticket (สำหรับ user) ──
+            @st.dialog("✏️ แก้ไขใบแจ้งซ่อม", width="large")
+            def edit_ticket_user_dialog(tk):
+                tid = tk['id']
+                st.markdown(f"<p style='color:#8BA0BC;font-size:12px;'>กำลังแก้ไข <b style='color:#00C6FF;font-family:DM Mono,monospace;'>{tid}</b></p>", unsafe_allow_html=True)
+                with st.form(f"user_edit_form_{tid}"):
+                    ec1, ec2 = st.columns(2)
+                    with ec1:
+                        e_user = st.text_input("ชื่อผู้แจ้ง", value=tk.get('user') or "")
+                        # dept dropdown
+                        cur_dept = tk.get('dept') or depts[0]
+                        try: dept_idx = depts.index(cur_dept) if cur_dept in depts else len(depts) - 1
+                        except: dept_idx = 0
+                        e_dept_choice = st.selectbox("แผนก", depts, index=dept_idx)
+                        e_dept_custom = st.text_input("ระบุแผนก (ถ้าเลือก Other)", value=cur_dept if cur_dept not in depts else "")
+                        cat_opts = ["Hardware","Software","Network","Other"]
+                        e_cat = st.selectbox("ประเภทงานซ่อม", cat_opts,
+                                             index=cat_opts.index(tk.get('category')) if tk.get('category') in cat_opts else 0)
+                        eq_opts = ["Computer PC","Notebook","TEC Printer","Laser Printer","IPDS Printer","TV","CCTV","IPad","Other"]
+                        e_eq = st.selectbox("ประเภทอุปกรณ์", eq_opts,
+                                            index=eq_opts.index(tk.get('equipment_type')) if tk.get('equipment_type') in eq_opts else 0)
+                    with ec2:
+                        e_asset = st.text_input("รหัสอุปกรณ์ (Asset ID)", value=tk.get('asset_id') or "")
+                        e_loc = st.text_input("สถานที่ตั้งอุปกรณ์", value=tk.get('location') or "")
+                        urg_opts = ["ปกติ","ด่วน","ด่วนมาก"]
+                        e_urgency = st.selectbox("ระดับความเร่งด่วน", urg_opts,
+                                                 index=urg_opts.index(tk.get('urgency')) if tk.get('urgency') in urg_opts else 0)
+                    e_desc = st.text_area("รายละเอียดปัญหา", value=tk.get('desc') or "", height=120)
+
+                    if st.form_submit_button("💾 บันทึกการแก้ไข", use_container_width=True):
+                        final_dept = e_dept_custom.strip() if e_dept_choice == "Other" else e_dept_choice
+                        if not e_user.strip() or not e_desc.strip() or not final_dept:
+                            st.error("❌ กรุณากรอกชื่อผู้แจ้ง แผนก และรายละเอียดปัญหา")
+                        else:
+                            update_ticket_user_fields(tid, {
+                                "user": e_user.strip(),
+                                "dept": final_dept,
+                                "category": e_cat,
+                                "equipment_type": e_eq,
+                                "asset_id": e_asset.strip(),
+                                "location": e_loc.strip(),
+                                "urgency": e_urgency,
+                                "desc": e_desc.strip()
+                            })
+                            st.toast(f"แก้ไข {tid} สำเร็จ!", icon="✅")
+                            st.session_state.pop(f"_edit_ticket_open_{tid}", None)
+                            st.rerun()
+
+            # ── Dialog ยืนยันยกเลิก ticket ──
+            @st.dialog("⚠️ ยืนยันการยกเลิกใบแจ้งซ่อม", width="small")
+            def cancel_ticket_dialog(tk):
+                tid = tk['id']
+                st.markdown(f"""
+                <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:14px;margin-bottom:14px;">
+                    <p style="color:#FCA5A5;margin:0;font-weight:600;">⚠️ คุณกำลังจะยกเลิกใบแจ้งซ่อมนี้</p>
+                    <p style="color:#8BA0BC;margin:6px 0 0 0;font-size:12px;">การกระทำนี้ไม่สามารถย้อนกลับได้</p>
+                </div>
+                <p><b style="color:#E8EDF5;">รหัส:</b> <span style="color:#00C6FF;font-family:DM Mono,monospace;">{tid}</span></p>
+                <p><b style="color:#E8EDF5;">ผู้แจ้ง:</b> <span style="color:#8BA0BC;">{tk.get('user','—')}</span></p>
+                <p><b style="color:#E8EDF5;">อาการ:</b> <span style="color:#8BA0BC;">{tk.get('desc','—')}</span></p>
+                """, unsafe_allow_html=True)
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    if st.button("❌ ไม่ยกเลิก", use_container_width=True, key=f"keep_{tid}"):
+                        st.session_state.pop(f"_cancel_ticket_open_{tid}", None)
+                        st.rerun()
+                with dc2:
+                    if st.button("🗑️ ยืนยันยกเลิก", use_container_width=True, key=f"confirm_cancel_{tid}", type="primary"):
+                        delete_ticket(tid)
+                        st.toast(f"ยกเลิก {tid} แล้ว", icon="🗑️")
+                        st.session_state.pop(f"_cancel_ticket_open_{tid}", None)
+                        st.rerun()
+
+            # ── ตรวจสอบ flag เพื่อเปิด dialog ที่เหมาะสม ──
+            for _, _r in df_show.iterrows():
+                _tid = _r['id']
+                if st.session_state.get(f"_edit_ticket_open_{_tid}"):
+                    edit_ticket_user_dialog(_r)
+                    break
+                if st.session_state.get(f"_cancel_ticket_open_{_tid}"):
+                    cancel_ticket_dialog(_r)
+                    break
 
             for _, row in df_show.iterrows():
                 status_cls  = f"status-{row['status']}"
