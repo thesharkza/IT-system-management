@@ -1,0 +1,70 @@
+name: Scheduled Telegram Reports
+
+# เวลาตามด้านล่างเป็น UTC — ปรับ -7 ชั่วโมงเพื่อให้ได้เวลาไทย
+# 08:00 ไทย = 01:00 UTC, 09:00 ไทย = 02:00 UTC, 17:00 ไทย = 10:00 UTC
+
+on:
+  schedule:
+    # รายงานประจำวัน — ทุกวัน 08:00 น. (ไทย)
+    - cron: '0 1 * * *'
+    # PM Overdue — ทุกวัน 09:00 น. (ไทย)
+    - cron: '0 2 * * *'
+    # รายงานสัปดาห์ — ทุกวันศุกร์ 17:00 น. (ไทย)
+    - cron: '0 10 * * 5'
+  # เปิดให้รันด้วยตัวเองจากหน้า Actions
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Report type'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - weekly
+          - pm_overdue
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet supabase pandas python-dateutil requests
+
+      - name: Determine report mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "report=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          else
+            # detect by cron expression
+            HOUR=$(date -u +%H)
+            DOW=$(date -u +%u)   # 1=Mon 5=Fri
+            if [ "$HOUR" = "01" ]; then
+              echo "report=daily" >> $GITHUB_OUTPUT
+            elif [ "$HOUR" = "02" ]; then
+              echo "report=pm_overdue" >> $GITHUB_OUTPUT
+            elif [ "$HOUR" = "10" ] && [ "$DOW" = "5" ]; then
+              echo "report=weekly" >> $GITHUB_OUTPUT
+            else
+              echo "report=daily" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Send report
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scripts/scheduled_report.py ${{ steps.mode.outputs.report }}
