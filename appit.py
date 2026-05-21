@@ -613,6 +613,19 @@ if page == "📝 แจ้งซ่อม (User)":
             df_tickets['_sort'] = df_tickets['status'].map(sort_map)
             df_sorted = df_tickets.sort_values(by=['_sort','date'], ascending=[True,False])
 
+            # แสดงสูงสุด 15 รายการ — เรียงตามสถานะ (งานที่ยังไม่เสร็จมาก่อน)
+            TICKETS_LIMIT = 15
+            total_count = len(df_sorted)
+            df_show = df_sorted.head(TICKETS_LIMIT)
+            unfinished = len(df_sorted[df_sorted['status'] != 'สำเร็จ'])
+
+            st.markdown(f"""
+            <p style='color:#8BA0BC;margin-bottom:14px;font-size:13px;'>
+              แสดง <b style='color:#E8EDF5;'>{len(df_show)}</b> จาก <b style='color:#E8EDF5;'>{total_count}</b> รายการล่าสุด
+              &nbsp;•&nbsp; งานที่ยังไม่เสร็จ <b style='color:#FCD34D;'>{unfinished}</b> รายการ
+            </p>
+            """, unsafe_allow_html=True)
+
             @st.dialog("📋 รายละเอียดงานซ่อม", width="large")
             def show_ticket_detail(row):
                 status_cls = f"status-{row['status']}"
@@ -677,7 +690,7 @@ if page == "📝 แจ้งซ่อม (User)":
                             st.toast("ขอบคุณสำหรับการประเมิน!", icon="⭐")
                             st.rerun()
 
-            for _, row in df_sorted.iterrows():
+            for _, row in df_show.iterrows():
                 status_cls  = f"status-{row['status']}"
                 urgency_cls = f"ticket-urgency-{row.get('urgency','ปกติ')}"
                 rating_val  = row.get('rating')
@@ -1431,21 +1444,142 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
 
     with tab_list:
         if not df_pm.empty:
-            st.dataframe(df_pm[['id','task_name','next_due_date','assignee','status']], use_container_width=True, hide_index=True)
-            pending = df_pm[df_pm['status'] != 'Completed']
-            if not pending.empty:
+            today_d = datetime.now().date()
+            df_pm_view = df_pm.copy()
+            df_pm_view['_due'] = pd.to_datetime(df_pm_view['next_due_date']).dt.date
+            df_pm_view['_overdue'] = (df_pm_view['_due'] < today_d) & (df_pm_view['status'] != 'Completed')
+
+            # Filter selector
+            fc1, fc2 = st.columns([2, 3])
+            with fc1:
+                view_mode = st.selectbox("แสดง", ["รอดำเนินการ + เลยกำหนด", "เลยกำหนดเท่านั้น", "เสร็จสิ้นแล้ว", "ทั้งหมด"], key="pm_list_view")
+            with fc2:
+                pm_search = st.text_input("🔍 ค้นหา", placeholder="พิมพ์ชื่องาน, Asset ID, ผู้รับผิดชอบ...", key="pm_list_search", label_visibility="collapsed")
+
+            df_pm_list = df_pm_view.copy()
+            if view_mode == "รอดำเนินการ + เลยกำหนด":
+                df_pm_list = df_pm_list[df_pm_list['status'] != 'Completed']
+            elif view_mode == "เลยกำหนดเท่านั้น":
+                df_pm_list = df_pm_list[df_pm_list['_overdue']]
+            elif view_mode == "เสร็จสิ้นแล้ว":
+                df_pm_list = df_pm_list[df_pm_list['status'] == 'Completed']
+
+            if pm_search:
+                q = pm_search.lower()
+                df_pm_list = df_pm_list[df_pm_list.apply(
+                    lambda r: any(q in str(r.get(c,'')).lower() for c in ['task_name','asset_id','assignee','id']),
+                    axis=1
+                )]
+
+            # เรียง: เลยกำหนดมาก่อน → รอดำเนินการ → เสร็จสิ้น, แล้วเรียงตามวันที่
+            df_pm_list['_status_order'] = df_pm_list.apply(
+                lambda r: 0 if r['_overdue'] else (1 if r['status'] != 'Completed' else 2), axis=1
+            )
+            df_pm_list = df_pm_list.sort_values(by=['_status_order','_due'], ascending=[True, True])
+
+            st.markdown(f"<p style='color:#8BA0BC;margin:10px 0;font-size:13px;'>พบ <b style='color:#E8EDF5;'>{len(df_pm_list)}</b> รายการ — คลิกที่การ์ดเพื่อบันทึกผล / ดูรายละเอียด</p>", unsafe_allow_html=True)
+
+            # ── Dialog: บันทึกผล / ดูรายละเอียด ──
+            @st.dialog("🔧 รายละเอียดงาน PM", width="large")
+            def pm_detail_dialog(pm):
+                pid = pm['id']
+                is_done = pm['status'] == 'Completed'
+                is_overdue = bool(pm.get('_overdue', False))
+
+                # Header
+                if is_done:
+                    badge_cls, badge_text = "status-สำเร็จ", "✅ เสร็จสิ้น"
+                elif is_overdue:
+                    badge_cls, badge_text = "status-รอตรวจสอบ", "🚨 เลยกำหนด"
+                else:
+                    badge_cls, badge_text = "status-ดำเนินการ", "🔧 รอดำเนินการ"
+
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                  <div>
+                    <span style="font-family:'DM Mono',monospace;font-size:12px;color:#00C6FF;">{pid}</span>
+                    <span style="margin-left:10px;" class="status-badge {badge_cls}">{badge_text}</span>
+                  </div>
+                  <div style="font-size:12px;color:#4A6080;">📅 {pm.get('next_due_date','')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown(f"### {pm.get('task_name','—')}")
+
+                ci1, ci2 = st.columns(2)
+                with ci1:
+                    st.markdown(f"**🖥️ ประเภทอุปกรณ์:** {pm.get('equipment_type','—')}")
+                    st.markdown(f"**🔖 รหัสอุปกรณ์:** `{pm.get('asset_id','—')}`")
+                with ci2:
+                    st.markdown(f"**👷 ผู้รับผิดชอบ:** {pm.get('assignee','—')}")
+                    st.markdown(f"**🔁 ความถี่:** {pm.get('frequency','—')}")
+
                 st.divider()
-                st.subheader("📝 บันทึกผลการตรวจเช็ค")
-                sel = st.selectbox("เลือกงาน PM เพื่อบันทึกผล", pending['id'].tolist())
-                target_pm = pending[pending['id'] == sel].iloc[0]
-                with st.expander(f"📌 รายการ Checklist สำหรับ: {target_pm['task_name']}", expanded=True):
-                    st.info(f"**สิ่งที่ต้องตรวจสอบ:**\n\n{target_pm.get('checklist','ไม่มีข้อมูล Checklist')}")
-                with st.form("pm_finish_form"):
-                    res = st.text_area("บันทึกผลการตรวจสอบ / ปัญหาที่พบ")
-                    if st.form_submit_button("✅ บันทึกและปิดงาน PM"):
-                        update_pm_full(sel, "Completed", res)
-                        st.success(f"บันทึกผลงาน {sel} เรียบร้อยแล้ว"); st.rerun()
-            else: st.success("🎉 ทุกแผนงานดำเนินการเสร็จสิ้นแล้ว!")
+                st.markdown("**📝 Checklist ที่ต้องตรวจสอบ**")
+                st.info(pm.get('checklist','ไม่มีข้อมูล Checklist'))
+
+                if is_done:
+                    st.divider()
+                    st.markdown("**✅ ผลการตรวจสอบ**")
+                    st.success(pm.get('pm_result') or "ไม่มีบันทึกผล")
+                else:
+                    # ── ฟอร์มบันทึกผล ──
+                    st.divider()
+                    st.markdown("### ✏️ บันทึกผลการตรวจสอบ")
+                    with st.form(f"pm_save_{pid}"):
+                        result_text = st.text_area("ผลการตรวจสอบ / ปัญหาที่พบ",
+                                                   placeholder="ระบุสิ่งที่ตรวจพบ, ปัญหา, หรือการดำเนินการที่ทำ...",
+                                                   height=120)
+                        if st.form_submit_button("✅ บันทึกและปิดงาน PM", use_container_width=True):
+                            update_pm_full(pid, "Completed", result_text)
+                            st.toast(f"บันทึกผล {pid} สำเร็จ!", icon="✅")
+                            st.rerun()
+
+            # ── Render Cards ──
+            if df_pm_list.empty:
+                st.success("🎉 ไม่มีรายการที่ตรงกับเงื่อนไข")
+            else:
+                for _, pm in df_pm_list.iterrows():
+                    is_done = pm['status'] == 'Completed'
+                    is_overdue = bool(pm.get('_overdue', False))
+                    if is_done:
+                        badge_cls, badge_text = "status-สำเร็จ", "✅ เสร็จสิ้น"
+                        days_html = ""
+                    elif is_overdue:
+                        badge_cls, badge_text = "status-รอตรวจสอบ", "🚨 เลยกำหนด"
+                        days_late = (today_d - pm['_due']).days
+                        days_html = f'<div style="font-size:11px;color:#FCA5A5;margin-top:6px;">เลย {days_late} วัน</div>'
+                    else:
+                        badge_cls, badge_text = "status-ดำเนินการ", "🔧 รอทำ"
+                        days_left = (pm['_due'] - today_d).days
+                        days_html = f'<div style="font-size:11px;color:#FCD34D;margin-top:6px;">อีก {days_left} วัน</div>' if days_left >= 0 else ""
+
+                    col_card, col_btn = st.columns([11, 1])
+                    with col_card:
+                        st.markdown(f"""
+                        <div class="ticket-card">
+                            <div class="ticket-card-left">
+                                <div class="ticket-id">{pm['id'][:24]}{'...' if len(str(pm['id']))>24 else ''}</div>
+                                <div class="ticket-user">{pm.get('task_name','—')}</div>
+                                <div class="ticket-date">📅 {pm.get('next_due_date','')}</div>
+                            </div>
+                            <div class="ticket-card-mid">
+                                <div class="ticket-cat">🖥️ {pm.get('equipment_type','—')} &nbsp;|&nbsp; 🔖 {pm.get('asset_id','—')}</div>
+                                <div class="ticket-cat" style="margin-top:4px;">👷 {pm.get('assignee','ยังไม่มอบหมาย')} &nbsp;|&nbsp; 🔁 {pm.get('frequency','—')}</div>
+                            </div>
+                            <div class="ticket-card-right">
+                                <div><span class="status-badge {badge_cls}">{badge_text}</span></div>
+                                {days_html}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_btn:
+                        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+                        icon = "🔍" if is_done else "✏️"
+                        if st.button(icon, key=f"pm_view_{pm['id']}", help="ดู / บันทึกผล", use_container_width=True):
+                            pm_detail_dialog(pm)
+        else:
+            st.info("ยังไม่มีแผนงาน PM ในระบบ")
 
     with tab_add:
         st.subheader("➕ เพิ่มแผนบำรุงรักษาและจัดตารางอัตโนมัติ")
