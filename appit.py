@@ -427,6 +427,12 @@ def update_pm_full(record_id, status, pm_result):
         "status": status, "pm_result": pm_result
     }).eq("id", record_id).execute()
 
+def update_asset(asset_id, data_dict):
+    supabase.table("assets").update(data_dict).eq("id", asset_id).execute()
+
+def delete_asset(asset_id):
+    supabase.table("assets").delete().eq("id", asset_id).execute()
+
 def _setup_thai_font(pdf):
     for family, filename in [("ThaiSarabun","THSarabunNew.ttf"),("ThaiPrompt","Prompt-Regular.ttf")]:
         if os.path.exists(filename):
@@ -1151,6 +1157,70 @@ elif page == "🗄️ ทะเบียนอุปกรณ์" and st.session
                 <p style="color:#8BA0BC;">วันที่หมดประกัน: 📅 {w_date}</p>
             </div>
             """, unsafe_allow_html=True)
+
+            # ── ปุ่มแก้ไข / ยกเลิกอุปกรณ์ ──
+            ab1, ab2, _ = st.columns([1, 1, 3])
+
+            @st.dialog("✏️ แก้ไขข้อมูลอุปกรณ์", width="large")
+            def edit_asset_dialog(asset):
+                st.markdown(f"<p style='color:#8BA0BC;font-size:12px;'>กำลังแก้ไข <b style='color:#00C6FF;font-family:DM Mono,monospace;'>{asset['id']}</b></p>", unsafe_allow_html=True)
+                with st.form(f"edit_asset_form_{asset['id']}"):
+                    ec1, ec2 = st.columns(2)
+                    with ec1:
+                        e_model = st.text_input("ยี่ห้อ/รุ่น", value=asset.get('model','') or "")
+                        try:
+                            dept_idx = depts.index(asset.get('dept','CHASSIS')) if asset.get('dept') in depts else 0
+                        except: dept_idx = 0
+                        e_dept = st.selectbox("แผนกที่ใช้งาน", depts, index=dept_idx)
+                        e_loc = st.text_input("สถานที่ตั้ง", value=asset.get('location','') or "")
+                    with ec2:
+                        e_user = st.text_input("ผู้ถือครอง/ผู้รับผิดชอบ", value=asset.get('assigned_user','') or "")
+                        # warranty date
+                        cur_w = asset.get('warranty_expire')
+                        try: w_default = pd.to_datetime(cur_w).date() if cur_w and pd.notna(cur_w) else datetime.now().date()
+                        except: w_default = datetime.now().date()
+                        e_warranty = st.date_input("วันที่หมดประกัน", value=w_default)
+                        e_status = st.selectbox("สถานะ", ["Active","Inactive","Disposed"],
+                                                index=["Active","Inactive","Disposed"].index(asset.get('status','Active')) if asset.get('status') in ["Active","Inactive","Disposed"] else 0)
+                    if st.form_submit_button("💾 บันทึกการเปลี่ยนแปลง", use_container_width=True):
+                        update_asset(asset['id'], {
+                            "model": e_model, "dept": e_dept, "location": e_loc,
+                            "assigned_user": e_user, "warranty_expire": str(e_warranty),
+                            "status": e_status
+                        })
+                        st.toast(f"บันทึกข้อมูล {asset['id']} สำเร็จ!", icon="✅")
+                        st.rerun()
+
+            @st.dialog("⚠️ ยืนยันการยกเลิกอุปกรณ์", width="small")
+            def delete_asset_dialog(asset):
+                st.markdown(f"""
+                <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:14px;margin-bottom:14px;">
+                    <p style="color:#FCA5A5;margin:0;font-weight:600;">⚠️ คุณกำลังจะลบอุปกรณ์นี้ออกจากระบบ</p>
+                    <p style="color:#8BA0BC;margin:6px 0 0 0;font-size:12px;">การกระทำนี้ไม่สามารถย้อนกลับได้</p>
+                </div>
+                <p><b style="color:#E8EDF5;">รหัส:</b> <span style="color:#00C6FF;font-family:DM Mono,monospace;">{asset['id']}</span></p>
+                <p><b style="color:#E8EDF5;">รุ่น:</b> <span style="color:#8BA0BC;">{asset.get('model','—')}</span></p>
+                <p><b style="color:#E8EDF5;">แผนก:</b> <span style="color:#8BA0BC;">{asset.get('dept','—')}</span></p>
+                """, unsafe_allow_html=True)
+                confirm_text = st.text_input(f"พิมพ์ **{asset['id']}** เพื่อยืนยัน", placeholder=asset['id'], key=f"del_confirm_{asset['id']}")
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    if st.button("❌ ยกเลิก", use_container_width=True, key=f"cancel_del_{asset['id']}"):
+                        st.rerun()
+                with dc2:
+                    if st.button("🗑️ ยืนยันลบ", use_container_width=True, key=f"confirm_del_{asset['id']}",
+                                 disabled=(confirm_text != asset['id'])):
+                        delete_asset(asset['id'])
+                        st.toast(f"ลบอุปกรณ์ {asset['id']} แล้ว", icon="🗑️")
+                        st.rerun()
+
+            with ab1:
+                if st.button("✏️ แก้ไขข้อมูล", use_container_width=True, key=f"edit_btn_{target_asset['id']}"):
+                    edit_asset_dialog(target_asset)
+            with ab2:
+                if st.button("🗑️ ยกเลิกอุปกรณ์", use_container_width=True, key=f"del_btn_{target_asset['id']}"):
+                    delete_asset_dialog(target_asset)
+
             st.write("---")
             st.write("### 🛠️ ประวัติการซ่อมและบำรุงรักษา (PM)")
             tab_repair, tab_pm_hist = st.tabs(["🔧 ประวัติการแจ้งซ่อม","📅 ประวัติการทำ PM"])
