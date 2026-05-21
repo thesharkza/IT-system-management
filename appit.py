@@ -705,11 +705,11 @@ if page == "📝 แจ้งซ่อม (User)":
                     ub1, ub2 = st.columns(2)
                     with ub1:
                         if st.button("✏️ แก้ไขข้อมูล", use_container_width=True, key=f"user_edit_{row['id']}"):
-                            st.session_state[f"_edit_ticket_open_{row['id']}"] = True
+                            st.session_state["pending_user_action"] = ("edit", row['id'])
                             st.rerun()
                     with ub2:
                         if st.button("🗑️ ยกเลิกใบแจ้งซ่อม", use_container_width=True, key=f"user_cancel_{row['id']}"):
-                            st.session_state[f"_cancel_ticket_open_{row['id']}"] = True
+                            st.session_state["pending_user_action"] = ("cancel", row['id'])
                             st.rerun()
                 elif row['status'] in ['ดำเนินการ', 'ส่งซ่อม']:
                     st.divider()
@@ -760,7 +760,6 @@ if page == "📝 แจ้งซ่อม (User)":
                                 "desc": e_desc.strip()
                             })
                             st.toast(f"แก้ไข {tid} สำเร็จ!", icon="✅")
-                            st.session_state.pop(f"_edit_ticket_open_{tid}", None)
                             st.rerun()
 
             # ── Dialog ยืนยันยกเลิก ticket ──
@@ -779,24 +778,24 @@ if page == "📝 แจ้งซ่อม (User)":
                 dc1, dc2 = st.columns(2)
                 with dc1:
                     if st.button("❌ ไม่ยกเลิก", use_container_width=True, key=f"keep_{tid}"):
-                        st.session_state.pop(f"_cancel_ticket_open_{tid}", None)
                         st.rerun()
                 with dc2:
                     if st.button("🗑️ ยืนยันยกเลิก", use_container_width=True, key=f"confirm_cancel_{tid}", type="primary"):
                         delete_ticket(tid)
                         st.toast(f"ยกเลิก {tid} แล้ว", icon="🗑️")
-                        st.session_state.pop(f"_cancel_ticket_open_{tid}", None)
                         st.rerun()
 
-            # ── ตรวจสอบ flag เพื่อเปิด dialog ที่เหมาะสม ──
-            for _, _r in df_show.iterrows():
-                _tid = _r['id']
-                if st.session_state.get(f"_edit_ticket_open_{_tid}"):
-                    edit_ticket_user_dialog(_r)
-                    break
-                if st.session_state.get(f"_cancel_ticket_open_{_tid}"):
-                    cancel_ticket_dialog(_r)
-                    break
+            # ── ตรวจสอบ pending action (เกิดจากผู้ใช้กดปุ่มในรอบก่อน) ──
+            _pa = st.session_state.pop("pending_user_action", None)
+            if _pa:
+                _act, _tid = _pa
+                _match = df_show[df_show['id'] == _tid]
+                if not _match.empty:
+                    _row = _match.iloc[0]
+                    if _act == "edit" and _row['status'] == 'รอตรวจสอบ':
+                        edit_ticket_user_dialog(_row)
+                    elif _act == "cancel" and _row['status'] == 'รอตรวจสอบ':
+                        cancel_ticket_dialog(_row)
 
             for _, row in df_show.iterrows():
                 status_cls  = f"status-{row['status']}"
