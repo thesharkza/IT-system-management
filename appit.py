@@ -441,6 +441,181 @@ def delete_ticket(ticket_id):
     """ลบ ticket — เฉพาะงาน status='รอตรวจสอบ' เท่านั้น เพื่อความปลอดภัย"""
     supabase.table("tickets").delete().eq("id", ticket_id).eq("status", "รอตรวจสอบ").execute()
 
+# =========================================================
+# 🔔 TELEGRAM NOTIFICATION MODULE
+# =========================================================
+import requests
+
+def _tg_config():
+    """อ่าน config จาก secrets — คืน (token, chat_id, enabled)"""
+    try:
+        token = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+        chat_id = st.secrets.get("TELEGRAM_CHAT_ID", "")
+        enabled = st.secrets.get("TELEGRAM_ENABLED", True)
+        return token, chat_id, enabled
+    except Exception:
+        return "", "", False
+
+def send_telegram(message: str, parse_mode: str = "Markdown", silent: bool = False) -> tuple:
+    """
+    ส่งข้อความเข้า Telegram chat ที่กำหนดใน secrets
+    คืน (success: bool, info: str)
+    """
+    token, chat_id, enabled = _tg_config()
+    if not enabled:
+        return False, "Telegram ถูกปิดไว้ใน config"
+    if not token or not chat_id:
+        return False, "ยังไม่ได้ตั้งค่า TELEGRAM_BOT_TOKEN หรือ TELEGRAM_CHAT_ID ใน secrets"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": parse_mode,
+        "disable_notification": silent,
+        "disable_web_page_preview": True
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=8)
+        if r.status_code == 200:
+            return True, "ส่งสำเร็จ"
+        return False, f"HTTP {r.status_code}: {r.text[:120]}"
+    except Exception as e:
+        return False, f"Error: {str(e)[:120]}"
+
+def _tg_escape(text: str) -> str:
+    """escape ตัวอักษรพิเศษของ Markdown ของ Telegram"""
+    if text is None: return "—"
+    s = str(text)
+    for ch in ['_','*','`','[']:
+        s = s.replace(ch, '\\' + ch)
+    return s
+
+def notify_new_ticket(ticket: dict):
+    """แจ้งเตือนเมื่อมี ticket ใหม่"""
+    urgency = ticket.get('urgency','ปกติ')
+    icon = "🚨" if urgency == "ด่วนมาก" else ("⚡" if urgency == "ด่วน" else "🆕")
+    silent = (urgency == "ปกติ")
+    msg = (
+        f"{icon} *งานแจ้งซ่อมใหม่*\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 `{ticket.get('id','')}`\n"
+        f"👤 *ผู้แจ้ง:* {_tg_escape(ticket.get('user',''))}\n"
+        f"🏢 *แผนก:* {_tg_escape(ticket.get('dept',''))}\n"
+        f"📂 *ประเภท:* {_tg_escape(ticket.get('category',''))}\n"
+        f"🖥️ *อุปกรณ์:* {_tg_escape(ticket.get('equipment_type',''))}\n"
+        f"📍 *สถานที่:* {_tg_escape(ticket.get('location','—'))}\n"
+        f"⚡ *เร่งด่วน:* {_tg_escape(urgency)}\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"📝 _{_tg_escape(ticket.get('desc',''))[:200]}_"
+    )
+    return send_telegram(msg, silent=silent)
+
+def notify_ticket_closed(ticket: dict, assignee: str = "", cost: float = 0.0):
+    """แจ้งเตือนเมื่อปิดงาน"""
+    msg = (
+        f"✅ *ปิดงานซ่อมสำเร็จ*\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 `{ticket.get('id','')}`\n"
+        f"🔧 *ช่างผู้รับผิดชอบ:* {_tg_escape(assignee or '—')}\n"
+        f"💰 *ค่าใช้จ่าย:* {cost:,.2f} บาท\n"
+        f"👤 *ผู้แจ้ง:* {_tg_escape(ticket.get('user',''))}"
+    )
+    return send_telegram(msg, silent=True)
+
+def notify_pm_overdue(pm: dict, days_late: int):
+    """แจ้งเตือน PM เลยกำหนด"""
+    msg = (
+        f"🚨 *งาน PM เลยกำหนด {days_late} วัน*\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"📋 *งาน:* {_tg_escape(pm.get('task_name',''))}\n"
+        f"🖥️ *อุปกรณ์:* {_tg_escape(pm.get('asset_id','—'))}\n"
+        f"👷 *ผู้รับผิดชอบ:* {_tg_escape(pm.get('assignee','—'))}\n"
+        f"📅 *กำหนดเดิม:* {_tg_escape(pm.get('next_due_date',''))}"
+    )
+    return send_telegram(msg, silent=False)
+
+def send_daily_summary():
+    """รายงานสรุปประจำวัน"""
+    df = load_table("tickets")
+    df_pm = load_table("pm_schedules")
+    today_str = datetime.now().strftime("%d %b %Y")
+
+    if df.empty:
+        return send_telegram(f"📊 *รายงานประจำวัน — {today_str}*\nยังไม่มีข้อมูลในระบบ")
+
+    pending  = len(df[df['status'] == 'รอตรวจสอบ'])
+    inprog   = len(df[df['status'] == 'ดำเนินการ'])
+    sending  = len(df[df['status'] == 'ส่งซ่อม'])
+    done     = len(df[df['status'] == 'สำเร็จ'])
+    urgent   = len(df[(df['status'] != 'สำเร็จ') & (df['urgency'] == 'ด่วนมาก')])
+
+    # PM งานที่ครบกำหนดวันนี้/พรุ่งนี้
+    pm_today_txt = ""
+    if not df_pm.empty:
+        df_pm['_due'] = pd.to_datetime(df_pm['next_due_date']).dt.date
+        today_d = datetime.now().date()
+        tomorrow_d = today_d + relativedelta(days=1)
+        overdue = df_pm[(df_pm['_due'] < today_d) & (df_pm['status'] != 'Completed')]
+        upcoming = df_pm[((df_pm['_due'] == today_d) | (df_pm['_due'] == tomorrow_d)) & (df_pm['status'] != 'Completed')]
+        if len(overdue) > 0 or len(upcoming) > 0:
+            pm_today_txt = f"\n🔧 *PM:* เลยกำหนด {len(overdue)} | ใกล้ครบ {len(upcoming)}"
+
+    urgent_txt = f"\n🚨 *งานด่วนมากค้าง:* {urgent}" if urgent > 0 else ""
+
+    msg = (
+        f"📊 *รายงานสรุปประจำวัน*\n"
+        f"📅 {today_str}\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"🔴 *รอตรวจสอบ:* {pending}\n"
+        f"🟡 *ดำเนินการ:* {inprog}\n"
+        f"🟣 *ส่งซ่อม:* {sending}\n"
+        f"🟢 *สำเร็จ:* {done}"
+        f"{urgent_txt}"
+        f"{pm_today_txt}"
+    )
+    return send_telegram(msg, silent=True)
+
+def send_weekly_summary():
+    """รายงานสรุปประจำสัปดาห์"""
+    df = load_table("tickets")
+    today_d = datetime.now().date()
+    week_ago = today_d + relativedelta(days=-7)
+
+    if df.empty:
+        return send_telegram("📈 *รายงานประจำสัปดาห์*\nยังไม่มีข้อมูล")
+
+    df['_date'] = pd.to_datetime(df['date']).dt.date
+    df_week = df[df['_date'] >= week_ago]
+
+    total_week = len(df_week)
+    done_week  = len(df_week[df_week['status'] == 'สำเร็จ'])
+    success_rate = (done_week/total_week*100) if total_week > 0 else 0
+
+    avg_csat = df_week['rating'].mean() if 'rating' in df_week.columns else None
+    csat_txt = f"\n⭐ *คะแนนเฉลี่ย:* {avg_csat:.2f}/5.0" if pd.notna(avg_csat) else ""
+
+    total_cost = pd.to_numeric(df_week['cost'], errors='coerce').sum()
+
+    # Top แผนก
+    top_dept = df_week['dept'].value_counts().head(3) if not df_week.empty else None
+    dept_txt = ""
+    if top_dept is not None and len(top_dept) > 0:
+        dept_txt = "\n\n🏢 *Top แผนกที่แจ้งซ่อม:*\n" + "\n".join(
+            [f"  • {_tg_escape(d)}: {n} งาน" for d, n in top_dept.items()]
+        )
+
+    msg = (
+        f"📈 *รายงานสรุปประจำสัปดาห์*\n"
+        f"📅 {week_ago.strftime('%d %b')} → {today_d.strftime('%d %b %Y')}\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 *งานทั้งหมด:* {total_week}\n"
+        f"✅ *ปิดงานสำเร็จ:* {done_week} ({success_rate:.1f}%)\n"
+        f"💰 *ค่าซ่อมรวม:* {total_cost:,.2f} บาท"
+        f"{csat_txt}"
+        f"{dept_txt}"
+    )
+    return send_telegram(msg, silent=True)
+
 def _setup_thai_font(pdf):
     for family, filename in [("ThaiSarabun","THSarabunNew.ttf"),("ThaiPrompt","Prompt-Regular.ttf")]:
         if os.path.exists(filename):
@@ -534,6 +709,7 @@ ALL_MENU = [
     ("📊", "Dashboard & รายงาน",      "📊 Dashboard",               False),
     ("🗄️", "ทะเบียนอุปกรณ์",          "🗄️ ทะเบียนอุปกรณ์",         False),
     ("🔧", "แผนบำรุงรักษา (PM)",     "🔧 แผนบำรุงรักษา (PM)",     False),
+    ("🔔", "การแจ้งเตือน",            "🔔 Notifications",           False),
 ]
 visible_menu = [m for m in ALL_MENU if m[3] or st.session_state.is_admin]
 
@@ -854,13 +1030,17 @@ if page == "📝 แจ้งซ่อม (User)":
                 if dept_choice == "Other" and not department.strip():
                     st.error("❌ กรุณาระบุชื่อแผนกของคุณ")
                 elif user_name and description and department.strip():
-                    insert_data("tickets", {
+                    new_ticket = {
                         "id": ticket_id, "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "user": user_name, "dept": department.strip(), "category": category,
                         "equipment_type": eq_type, "desc": description, "status": "รอตรวจสอบ",
                         "urgency": urgency, "image_path": image_data,
                         "asset_id": asset_id_input, "location": loc_input
-                    })
+                    }
+                    insert_data("tickets", new_ticket)
+                    # ── ส่ง Telegram แจ้งทีม IT ──
+                    try: notify_new_ticket(new_ticket)
+                    except Exception: pass
                     st.toast('ส่งเรื่องแจ้งซ่อมเรียบร้อยแล้ว!', icon='✅')
                     st.success(f"🎉 บันทึกข้อมูลสำเร็จ! หมายเลขอ้างอิง: **{ticket_id}**")
                 else:
@@ -958,6 +1138,11 @@ elif page == "💻 จัดการงานซ่อม (ช่าง)" and s
 
                     if save_btn:
                         update_ticket_full(tid, n_status, assignee, root, sol, cost)
+                        # ── ส่ง Telegram แจ้งเตือนเมื่อปิดงานสำเร็จ ──
+                        if n_status == "สำเร็จ" and tk.get('status') != "สำเร็จ":
+                            try:
+                                notify_ticket_closed(dict(tk), assignee=assignee, cost=float(cost or 0.0))
+                            except Exception: pass
                         st.toast(f"บันทึกงาน {tid} สำเร็จ!", icon="✅")
                         st.rerun()
 
@@ -1716,3 +1901,122 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                         elif freq == "รายปี": curr_date += relativedelta(years=1)
                     st.success(f"✅ สร้างแผนงานสำเร็จ! จำนวน {int(count)} รายการสำหรับ {asset_id_pm}"); st.rerun()
                 else: st.error("❌ กรุณากรอกข้อมูลให้ครบถ้วน (Asset ID, ผู้รับผิดชอบ, Checklist)")
+
+# ==========================================
+# หน้า 6: 🔔 Notification Settings
+# ==========================================
+elif page == "🔔 Notifications" and st.session_state.is_admin:
+    st.title("🔔 การแจ้งเตือน Telegram")
+
+    # Status block
+    token, chat_id, enabled = _tg_config()
+    if not token or not chat_id:
+        st.warning("⚠️ ยังไม่ได้ตั้งค่า Telegram — โปรดเพิ่ม `TELEGRAM_BOT_TOKEN` และ `TELEGRAM_CHAT_ID` ใน Streamlit secrets")
+    elif not enabled:
+        st.info("ℹ️ Telegram ถูกปิดอยู่ ตั้ง `TELEGRAM_ENABLED = true` ใน secrets เพื่อเปิดใช้งาน")
+    else:
+        st.markdown("""
+        <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+          <span style="color:#6EE7B7;font-weight:600;">✅ Telegram พร้อมใช้งาน</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── ทดสอบส่งข้อความ ──
+    st.subheader("🧪 ทดสอบส่งข้อความ")
+    with st.form("test_telegram_form"):
+        test_msg = st.text_area("ข้อความทดสอบ", value="🧪 ทดสอบการแจ้งเตือนจาก ILT IT Helpdesk\nเชื่อมต่อสำเร็จ!", height=80)
+        if st.form_submit_button("📨 ส่งทดสอบ", use_container_width=True):
+            ok, info = send_telegram(test_msg)
+            if ok: st.success(f"✅ {info}")
+            else: st.error(f"❌ {info}")
+
+    st.divider()
+
+    # ── ปุ่มส่งรายงานทันที ──
+    st.subheader("📊 ส่งรายงานทันที")
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        if st.button("📅 ส่งรายงานประจำวัน", use_container_width=True):
+            ok, info = send_daily_summary()
+            if ok: st.success(f"✅ {info}")
+            else: st.error(f"❌ {info}")
+    with rc2:
+        if st.button("📈 ส่งรายงานประจำสัปดาห์", use_container_width=True):
+            ok, info = send_weekly_summary()
+            if ok: st.success(f"✅ {info}")
+            else: st.error(f"❌ {info}")
+
+    st.divider()
+
+    # ── ประเภทการแจ้งเตือน ──
+    st.subheader("📋 ประเภทการแจ้งเตือนที่ระบบส่ง")
+    notifications_info = [
+        ("🆕", "ticket ใหม่",             "ทันที เมื่อ user ส่งใบแจ้งซ่อม",            "Real-time"),
+        ("🚨", "งานด่วนมาก",              "ทันที พร้อมเสียงเตือน",                       "Real-time + Alert"),
+        ("✅", "ปิดงานสำเร็จ",            "เมื่อช่างเปลี่ยน status เป็น 'สำเร็จ'",       "Real-time"),
+        ("📅", "รายงานประจำวัน",          "ทุกวัน 08:00 น.",                             "Daily"),
+        ("📈", "รายงานประจำสัปดาห์",      "ทุกศุกร์ 17:00 น.",                           "Weekly"),
+        ("🚨", "PM เลยกำหนด",             "ทุกวัน 09:00 น. (เฉพาะถ้ามีงานเลยกำหนด)",     "Daily"),
+    ]
+    rows_html = ""
+    for icon, name, when, freq in notifications_info:
+        rows_html += f"""
+        <tr>
+          <td style="padding:10px;font-size:18px;">{icon}</td>
+          <td style="padding:10px;color:#E8EDF5;font-weight:500;">{name}</td>
+          <td style="padding:10px;color:#8BA0BC;font-size:13px;">{when}</td>
+          <td style="padding:10px;"><span class="status-badge status-ดำเนินการ">{freq}</span></td>
+        </tr>"""
+    st.markdown(f"""
+    <table style="width:100%;border-collapse:collapse;background:rgba(17,34,64,0.85);border:1px solid rgba(30,111,217,0.25);border-radius:12px;overflow:hidden;">
+      <thead><tr style="background:rgba(30,111,217,0.1);">
+        <th style="padding:10px;text-align:left;color:#8BA0BC;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;width:50px;"></th>
+        <th style="padding:10px;text-align:left;color:#8BA0BC;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">ประเภท</th>
+        <th style="padding:10px;text-align:left;color:#8BA0BC;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">เงื่อนไข</th>
+        <th style="padding:10px;text-align:left;color:#8BA0BC;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">ความถี่</th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── คู่มือ Setup ──
+    with st.expander("📖 คู่มือ Setup Telegram Bot (ครั้งแรก)"):
+        st.markdown("""
+        ### ขั้นตอน Setup
+
+        **1. สร้าง Bot ใน Telegram**
+        - เปิด Telegram → ค้นหา `@BotFather` → กด Start
+        - พิมพ์ `/newbot` → ตั้งชื่อ (เช่น `ILT IT Helpdesk Bot`) → ตั้ง username (เช่น `ilt_helpdesk_bot`)
+        - BotFather จะส่ง **Bot Token** กลับมา รูปแบบ `123456:ABC-DEF...` → คัดลอกเก็บไว้
+
+        **2. สร้างกลุ่มและ invite Bot**
+        - สร้าง Group ใหม่ใน Telegram ชื่อ "IT Team Notifications"
+        - เพิ่มสมาชิกทีม IT ทั้งหมด
+        - กดเพิ่ม Bot ของคุณเข้ากลุ่ม → ตั้งเป็น Admin (ให้สิทธิ์ส่งข้อความ)
+
+        **3. หา Chat ID ของกลุ่ม**
+        - ส่งข้อความใดๆ ในกลุ่ม (เช่น "hi bot")
+        - เปิดเบราว์เซอร์ → วาง URL นี้ (แทนที่ `<TOKEN>` ด้วย Bot Token):
+        ```
+        https://api.telegram.org/bot<TOKEN>/getUpdates
+        ```
+        - ดูค่า `"chat":{"id":-123456789,...}` → คัดลอกเลข Chat ID (มีเครื่องหมาย `-` นำหน้าสำหรับ group)
+
+        **4. ตั้งค่า Streamlit Secrets**
+        - Streamlit Cloud → Manage App → Settings → Secrets
+        - เพิ่มบรรทัด:
+        ```toml
+        TELEGRAM_BOT_TOKEN = "123456:ABC-DEF_your_token_here"
+        TELEGRAM_CHAT_ID = "-123456789"
+        TELEGRAM_ENABLED = true
+        ```
+        - Save แล้ว Reboot app
+
+        **5. ทดสอบ**
+        - กลับมาที่หน้านี้ → กดปุ่ม "📨 ส่งทดสอบ" → ดูข้อความเด้งในกลุ่ม Telegram
+
+        ### รายงานรายวัน/รายสัปดาห์ (ตั้งเวลาอัตโนมัติ)
+        จะต้องตั้ง GitHub Actions แยก (ดูไฟล์ `.github/workflows/scheduled_reports.yml`)
+        """)
