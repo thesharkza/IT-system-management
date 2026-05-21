@@ -1555,24 +1555,26 @@ elif page == "🔧 แผนบำรุงรักษา (PM)" and st.session_
                         days_html = f'<div style="font-size:11px;color:#FCD34D;margin-top:6px;">อีก {days_left} วัน</div>' if days_left >= 0 else ""
 
                     col_card, col_btn = st.columns([11, 1])
+                    # ── ช่วยจัดการ NaN / None / empty ในการ์ด ──
+                    def _sf(v, default='—'):
+                        if v is None: return default
+                        try:
+                            if pd.isna(v): return default
+                        except (TypeError, ValueError): pass
+                        s = str(v).strip()
+                        return s if s and s.lower() != 'nan' else default
+
+                    pm_id        = _sf(pm.get('id'), '—')
+                    pm_id_short  = pm_id[:24] + ('...' if len(pm_id) > 24 else '')
+                    pm_task      = _sf(pm.get('task_name'))
+                    pm_due       = _sf(pm.get('next_due_date'), '')
+                    pm_eq        = _sf(pm.get('equipment_type'))
+                    pm_asset     = _sf(pm.get('asset_id'))
+                    pm_assignee  = _sf(pm.get('assignee'), 'ยังไม่มอบหมาย')
+                    pm_freq      = _sf(pm.get('frequency'))
+
                     with col_card:
-                        st.markdown(f"""
-                        <div class="ticket-card">
-                            <div class="ticket-card-left">
-                                <div class="ticket-id">{pm['id'][:24]}{'...' if len(str(pm['id']))>24 else ''}</div>
-                                <div class="ticket-user">{pm.get('task_name','—')}</div>
-                                <div class="ticket-date">📅 {pm.get('next_due_date','')}</div>
-                            </div>
-                            <div class="ticket-card-mid">
-                                <div class="ticket-cat">🖥️ {pm.get('equipment_type','—')} &nbsp;|&nbsp; 🔖 {pm.get('asset_id','—')}</div>
-                                <div class="ticket-cat" style="margin-top:4px;">👷 {pm.get('assignee','ยังไม่มอบหมาย')} &nbsp;|&nbsp; 🔁 {pm.get('frequency','—')}</div>
-                            </div>
-                            <div class="ticket-card-right">
-                                <div><span class="status-badge {badge_cls}">{badge_text}</span></div>
-                                {days_html}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(f"""<div class="ticket-card"><div class="ticket-card-left"><div class="ticket-id">{pm_id_short}</div><div class="ticket-user">{pm_task}</div><div class="ticket-date">📅 {pm_due}</div></div><div class="ticket-card-mid"><div class="ticket-cat">🖥️ {pm_eq} &nbsp;|&nbsp; 🔖 {pm_asset}</div><div class="ticket-cat" style="margin-top:4px;">👷 {pm_assignee} &nbsp;|&nbsp; 🔁 {pm_freq}</div></div><div class="ticket-card-right"><div><span class="status-badge {badge_cls}">{badge_text}</span></div>{days_html}</div></div>""", unsafe_allow_html=True)
                     with col_btn:
                         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
                         icon = "🔍" if is_done else "✏️"
