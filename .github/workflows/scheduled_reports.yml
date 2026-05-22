@@ -5,12 +5,18 @@ name: Scheduled Telegram Reports
 
 on:
   schedule:
-    # รายงานประจำวัน — ทุกวัน 08:00 น. (ไทย)
-    - cron: '0 1 * * *'
-    # PM Overdue — ทุกวัน 09:00 น. (ไทย)
-    - cron: '0 2 * * *'
-    # รายงานสัปดาห์ — ทุกวันศุกร์ 17:00 น. (ไทย)
-    - cron: '0 10 * * 5'
+    # ⚠️ GitHub Actions cron มัก delay ในนาที :00 ของชั่วโมง — ใช้นาทีคี่ลดความน่าจะถูกข้าม
+    # เวลาตามด้านล่างเป็น UTC — ปรับ -7 ชั่วโมงเพื่อให้ได้เวลาไทย
+    # 08:00 ไทย = 01:00 UTC → ตั้ง 01:15 UTC (08:15 ไทย)
+    # 09:00 ไทย = 02:00 UTC → ตั้ง 02:15 UTC (09:15 ไทย)
+    # 17:00 ไทย = 10:00 UTC → ตั้ง 10:15 UTC (17:15 ไทย)
+
+    # รายงานประจำวัน — ทุกวัน 08:15 น. (ไทย)
+    - cron: '15 1 * * *'
+    # PM Overdue — ทุกวัน 09:15 น. (ไทย)
+    - cron: '15 2 * * *'
+    # รายงานสัปดาห์ — ทุกวันศุกร์ 17:15 น. (ไทย)
+    - cron: '15 10 * * 5'
   # เปิดให้รันด้วยตัวเองจากหน้า Actions
   workflow_dispatch:
     inputs:
@@ -46,7 +52,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "report=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
           else
-            # detect by cron expression
+            # detect by cron expression — ทุก cron set ที่ 15 นาที
             HOUR=$(date -u +%H)
             DOW=$(date -u +%u)   # 1=Mon 5=Fri
             if [ "$HOUR" = "01" ]; then
