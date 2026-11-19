@@ -33,6 +33,14 @@ if not all([SUPABASE_URL, SUPABASE_KEY, TG_TOKEN, TG_CHAT_ID]):
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ── Keep-alive ping — ยืดอายุ Supabase free tier (ป้องกัน auto-pause) ──
+def _keepalive():
+    """ยิง query เล็กๆ ไว้ให้ Supabase รู้ว่า project ยัง active"""
+    try:
+        supabase.table("tickets").select("id").limit(1).execute()
+    except Exception as e:
+        print(f"⚠️  Keep-alive failed (project อาจ pause): {e}")
+
 # ── Helpers ──
 def _esc(t):
     if t is None: return "—"
@@ -154,6 +162,8 @@ def pm_overdue_report():
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
     print(f"▶ Running: {mode}")
+    # ping Supabase ก่อนทุกครั้งเพื่อป้องกัน auto-pause (free tier)
+    _keepalive()
     if mode == "daily":       ok = daily_report()
     elif mode == "weekly":    ok = weekly_report()
     elif mode == "pm_overdue":ok = pm_overdue_report()
